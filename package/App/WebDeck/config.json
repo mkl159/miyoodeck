@@ -1,0 +1,6 @@
+{
+  "label": "Web Deck",
+  "icon": "../../Icons/Default/app/webdeck.png",
+  "launch": "launch.sh",
+  "description": "Remote control your Miyoo via browser"
+}
