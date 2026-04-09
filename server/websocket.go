@@ -193,7 +193,7 @@ func broadcastLoop() {
 	}()
 
 	statsTicker := time.NewTicker(2 * time.Second)
-	screenshotTicker := time.NewTicker(3 * time.Second)
+	screenshotTicker := time.NewTicker(1500 * time.Millisecond)
 	defer statsTicker.Stop()
 	defer screenshotTicker.Stop()
 
@@ -229,9 +229,9 @@ func broadcastLoop() {
 				continue
 			}
 			if isGameRunning() {
-				screenshotTicker.Reset(5 * time.Second)
-			} else {
 				screenshotTicker.Reset(3 * time.Second)
+			} else {
+				screenshotTicker.Reset(1500 * time.Millisecond)
 			}
 			b64 := screenshotBase64()
 			if b64 == "" {

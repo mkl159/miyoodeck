@@ -68,6 +68,6 @@ sleep 1
 infoPanel \
     -t "Web Deck Started" \
     -m "Open in your browser:\nhttp://$IP:$WEBDECK_PORT\n\nServer running in background.\nPress MENU to return." \
-    --timeout 8 &
+    --timeout 20 &
 
 exit 0

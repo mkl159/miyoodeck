@@ -6,17 +6,19 @@ import (
 	"encoding/binary"
 	"image"
 	"image/color"
+	"image/jpeg"
 	"image/png"
 	"io"
 	"net/http"
 	"os"
 )
 
-// Miyoo Mini framebuffer: 640x480 RGB565 (16-bit per pixel)
+// Miyoo Mini framebuffer: 640x480 BGR565 (16-bit per pixel)
+// Physical framebuffer is triple-buffered (640×1440 virtual, yoffset ∈ {0,480,960})
 const (
 	fbWidth  = 640
 	fbHeight = 480
-	fbBPP    = 2 // bytes per pixel (RGB565)
+	fbBPP    = 2 // bytes per pixel (BGR565)
 	fbSize   = fbWidth * fbHeight * fbBPP
 )
 
@@ -25,13 +27,11 @@ func handleScreenshot(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
 	img, err := captureFramebuffer()
 	if err != nil {
 		jsonError(w, "Screenshot failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "no-cache, no-store")
 	png.Encode(w, img)
@@ -43,6 +43,12 @@ func captureFramebuffer() (*image.RGBA, error) {
 		return nil, err
 	}
 	defer f.Close()
+
+	// Seek to the currently displayed buffer (FBIOGET_VSCREENINFO ioctl).
+	// Without this we sometimes read a buffer mid-render → "old TV" tearing effect.
+	if off := getFbYOffset(f); off > 0 {
+		f.Seek(off, 0)
+	}
 
 	buf := make([]byte, fbSize)
 	n, err := io.ReadFull(f, buf)
@@ -65,13 +71,16 @@ func captureFramebuffer() (*image.RGBA, error) {
 			}
 			pixel := binary.LittleEndian.Uint16(buf[idx : idx+2])
 			r8, g8, b8 := rgb565ToRGB888(pixel)
-			img.SetRGBA(x, y, color.RGBA{R: r8, G: g8, B: b8, A: 255})
+			// Miyoo Mini framebuffer is rotated 180° relative to display orientation.
+			// Flip both X and Y axes to produce an upright image.
+			img.SetRGBA(w-1-x, h-1-y, color.RGBA{R: r8, G: g8, B: b8, A: 255})
 		}
 	}
 	return img, nil
 }
 
-// Miyoo Mini framebuffer is BGR565 (blue in high bits, red in low bits)
+// rgb565ToRGB888 converts a BGR565 pixel (Miyoo Mini format) to RGB888.
+// The Miyoo Mini stores blue in the high bits and red in the low bits.
 func rgb565ToRGB888(pixel uint16) (uint8, uint8, uint8) {
 	b5 := (pixel >> 11) & 0x1F
 	g6 := (pixel >> 5) & 0x3F
@@ -79,15 +88,16 @@ func rgb565ToRGB888(pixel uint16) (uint8, uint8, uint8) {
 	return uint8((r5 * 255) / 31), uint8((g6 * 255) / 63), uint8((b5 * 255) / 31)
 }
 
-// screenshotBase64 returns the framebuffer as a base64-encoded PNG data URI.
+// screenshotBase64 returns the framebuffer as a JPEG data URI.
+// JPEG is ~5x faster to encode than PNG on ARM — gives smoother live preview.
 func screenshotBase64() string {
 	img, err := captureFramebuffer()
 	if err != nil {
 		return ""
 	}
 	var buf bytes.Buffer
-	if err := png.Encode(&buf, img); err != nil {
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
 		return ""
 	}
-	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
 }
