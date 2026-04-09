@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"net/http"
 	"os"
 )
@@ -44,7 +45,7 @@ func captureFramebuffer() (*image.RGBA, error) {
 	defer f.Close()
 
 	buf := make([]byte, fbSize)
-	n, err := f.Read(buf)
+	n, err := io.ReadFull(f, buf)
 	if err != nil && n == 0 {
 		return nil, err
 	}
@@ -70,10 +71,11 @@ func captureFramebuffer() (*image.RGBA, error) {
 	return img, nil
 }
 
+// Miyoo Mini framebuffer is BGR565 (blue in high bits, red in low bits)
 func rgb565ToRGB888(pixel uint16) (uint8, uint8, uint8) {
-	r5 := (pixel >> 11) & 0x1F
+	b5 := (pixel >> 11) & 0x1F
 	g6 := (pixel >> 5) & 0x3F
-	b5 := pixel & 0x1F
+	r5 := pixel & 0x1F
 	return uint8((r5 * 255) / 31), uint8((g6 * 255) / 63), uint8((b5 * 255) / 31)
 }
 

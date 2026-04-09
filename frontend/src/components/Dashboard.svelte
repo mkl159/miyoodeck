@@ -1,94 +1,105 @@
 <script>
+  import { onMount, onDestroy } from 'svelte'
   import { api } from '../api.js'
   import { t } from '../i18n.js'
-  import { onMount, onDestroy } from 'svelte'
+  import Controller from './Controller.svelte'
 
   export let stats = null
-  export let screenshot = null
+  export let screenshot = null  // base64 from WebSocket
 
-  let screenshotTs = Date.now()
   let refreshInterval = 3
+  let ts = Date.now()
   let timer = null
   let downloading = false
 
-  onMount(() => { startPolling() })
-  onDestroy(() => stopPolling())
+  onMount(startPolling)
+  onDestroy(stopPolling)
 
   function startPolling() {
     stopPolling()
-    timer = setInterval(() => { screenshotTs = Date.now() }, refreshInterval * 1000)
+    // Fix #8: only poll if no WS screenshot arriving
+    timer = setInterval(() => { ts = Date.now() }, refreshInterval * 1000)
   }
   function stopPolling() { clearInterval(timer) }
 
-  async function downloadScreenshot() {
+  // Fix #8: use a single clean URL with fresh ts each time
+  $: screenshotSrc = screenshot || api.screenshotUrl(ts)
+
+  async function saveScreenshot() {
     downloading = true
     const a = document.createElement('a')
-    a.href = api.screenshotUrl()
+    a.href = api.screenshotUrl(Date.now())
     a.download = `miyoo_${Date.now()}.png`
     a.click()
     setTimeout(() => downloading = false, 1000)
   }
 
   function fmtMb(mb) {
-    if (mb >= 1024) return (mb/1024).toFixed(1) + ' GB'
+    if (mb >= 1024) return (mb / 1024).toFixed(1) + ' GB'
     return mb + ' MB'
   }
 
-  $: ramPct = stats ? Math.round((stats.ram.used / stats.ram.total) * 100) : 0
-  $: cpuPct = stats ? Math.round(stats.cpu_percent) : 0
-  $: batPct = stats?.battery?.percent ?? -1
-  $: screenshotSrc = screenshot || api.screenshotUrl() + '&ts=' + screenshotTs
+  $: cpuPct  = stats ? Math.round(stats.cpu_percent) : 0
+  $: ramPct  = (stats && stats.ram.total > 0) ? Math.round((stats.ram.used / stats.ram.total) * 100) : 0
+  $: batPct  = stats?.battery?.percent ?? -1
+  $: gameOn  = stats?.game_running ?? false
+  $: ramOk   = stats && stats.ram.total > 0
+  $: batOk   = batPct >= 0
 </script>
 
 <div class="dashboard">
   <div class="stats-row">
     <!-- CPU -->
-    <div class="stat-card">
-      <div class="stat-label">{$t.cpu}</div>
-      <div class="stat-value">{cpuPct}<span class="unit">%</span></div>
-      <div class="bar"><div class="bar-fill cpu" style="width:{cpuPct}%"></div></div>
-      {#if stats}<div class="stat-sub">{stats.cpu_freq_mhz} MHz</div>{/if}
+    <div class="card">
+      <div class="label">{$t.cpu}</div>
+      <div class="value">{cpuPct}<span class="unit">%</span></div>
+      <div class="bar"><div class="fill cpu" style="width:{cpuPct}%"></div></div>
+      {#if stats}<small>{stats.cpu_freq_mhz} MHz</small>{/if}
     </div>
 
     <!-- RAM -->
-    <div class="stat-card">
-      <div class="stat-label">{$t.ram}</div>
-      <div class="stat-value">{stats ? fmtMb(stats.ram.used) : '—'}</div>
-      <div class="bar"><div class="bar-fill ram" style="width:{ramPct}%"></div></div>
-      {#if stats}<div class="stat-sub">{fmtMb(stats.ram.available)} {$lang === 'fr' ? 'libre' : 'free'}</div>{/if}
+    <div class="card">
+      <div class="label">{$t.ram}</div>
+      <div class="value">{ramOk ? fmtMb(stats.ram.used) : (stats ? '0 MB' : '—')}</div>
+      <div class="bar"><div class="fill ram" style="width:{ramPct}%"></div></div>
+      {#if ramOk}<small>{fmtMb(stats.ram.available)} free</small>
+      {:else if stats}<small class="warn">N/A</small>{/if}
     </div>
 
     <!-- Battery -->
-    <div class="stat-card">
-      <div class="stat-label">{$t.battery}</div>
-      <div class="stat-value">
-        {#if stats && batPct >= 0}
-          {batPct}<span class="unit">%</span>
-          {#if stats.battery.charging}<span class="green">⚡</span>{/if}
+    <div class="card">
+      <div class="label">{$t.battery}</div>
+      <div class="value">
+        {#if batOk}{batPct}<span class="unit">%</span>
+          {#if stats?.battery?.charging}<span class="green">⚡</span>{/if}
+        {:else if stats}<span class="warn">N/A</span>
         {:else}—{/if}
       </div>
-      {#if stats && batPct >= 0}
-        <div class="bar">
-          <div class="bar-fill bat" class:low={batPct < 20} style="width:{batPct}%"></div>
-        </div>
-        <div class="stat-sub">{stats.battery.voltage}</div>
+      {#if batOk}
+        <div class="bar"><div class="fill bat" class:low={batPct < 20} style="width:{batPct}%"></div></div>
+        {#if stats?.battery?.voltage}<small>{stats.battery.voltage}</small>{/if}
       {/if}
     </div>
 
     <!-- Network -->
-    <div class="stat-card">
-      <div class="stat-label">{$t.network}</div>
-      <div class="stat-value ip">{stats ? stats.ip : '—'}</div>
-      {#if stats}<div class="stat-sub">↑ {stats.uptime}</div>{/if}
+    <div class="card">
+      <div class="label">{$t.network}</div>
+      <div class="value ip">{stats?.ip ?? '—'}</div>
+      {#if stats}<small>↑ {stats.uptime}</small>{/if}
+      {#if gameOn}<div class="game-badge">🎮 En jeu</div>{/if}
     </div>
   </div>
 
+  <!-- Gamepad controller -->
+  <Controller />
+
   <!-- Live screen -->
-  <div class="screen-section">
-    <div class="section-header">
-      <h2>{$t.liveScreen}</h2>
-      <div class="controls">
-        <label class="select-wrap">
+  <div class="screen-card">
+    <div class="card-header">
+      <span class="card-title">{$t.liveScreen}</span>
+      {#if gameOn}<span class="live-dot"></span>{/if}
+      <div class="header-actions">
+        <label class="select-row">
           {$t.refresh}
           <select bind:value={refreshInterval} on:change={startPolling}>
             <option value={1}>1s</option>
@@ -98,21 +109,21 @@
             <option value={10}>10s</option>
           </select>
         </label>
-        <button class="btn-sm" on:click={downloadScreenshot} disabled={downloading}>
+        <button class="btn-sm" on:click={saveScreenshot} disabled={downloading}>
           {$t.savePng}
         </button>
       </div>
     </div>
 
     <div class="screen-wrap">
-      <img
-        src={screenshotSrc}
-        alt="Miyoo screen"
-        class="screen"
-        on:error={(e) => e.target.style.display='none'}
-        on:load={(e) => e.target.style.display='block'}
-      />
-      <div class="screen-fallback">
+      <!-- Fix #3: removed dead <script context="module"> -->
+      {#if screenshotSrc}
+        <img src={screenshotSrc} alt="Miyoo screen" class="screen"
+          on:error={(e) => { e.target.style.opacity = 0 }}
+          on:load={(e) => { e.target.style.opacity = 1 }}
+        />
+      {/if}
+      <div class="no-screen">
         <span>{$t.screenUnavailable}</span>
         <small>{$t.startGame}</small>
       </div>
@@ -120,71 +131,72 @@
   </div>
 </div>
 
-<script context="module">
-  import { get } from 'svelte/store'
-  import { lang } from '../i18n.js'
-  // helper to read lang store in non-reactive context
-</script>
-
 <style>
   .dashboard { padding: 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; height: 100%; }
 
-  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
-  .stat-card {
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 10px; }
+  .card {
     background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; padding: 14px;
     display: flex; flex-direction: column; gap: 3px;
   }
-  .stat-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1.5px; color: #444; }
-  .stat-value { font-size: 1.5rem; font-weight: 700; color: #e0e0e0; line-height: 1.1; }
-  .unit { font-size: 0.85rem; color: #666; }
-  .green { color: #6bff9d; font-size: 0.85rem; margin-left: 4px; }
-  .stat-sub { font-size: 0.7rem; color: #444; margin-top: 2px; }
-  .ip { font-size: 0.9rem !important; font-family: monospace; color: #6bff9d !important; }
-
-  .bar { height: 3px; background: #161616; border-radius: 2px; overflow: hidden; margin: 6px 0 2px; }
-  .bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
-  .bar-fill.cpu { background: linear-gradient(90deg, #e8488a, #ff8ab4); }
-  .bar-fill.ram { background: linear-gradient(90deg, #6b9dff, #a0c0ff); }
-  .bar-fill.bat { background: linear-gradient(90deg, #6bff9d, #a0ffcc); }
-  .bar-fill.bat.low { background: #ff6b6b; }
-
-  .screen-section {
-    background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; overflow: hidden;
-    flex: 1;
+  .label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #3a3a3a; }
+  .value { font-size: 1.5rem; font-weight: 700; color: #e0e0e0; line-height: 1.1; }
+  .unit { font-size: 0.8rem; color: #555; }
+  .green { color: #6bff9d; font-size: 0.8rem; margin-left: 3px; }
+  small { font-size: 0.68rem; color: #3a3a3a; margin-top: 2px; }
+  .warn { font-size: 0.75rem; color: #555; }
+  .ip { font-size: 0.88rem !important; font-family: monospace; color: #6bff9d !important; }
+  .game-badge {
+    margin-top: 4px; font-size: 0.65rem; color: #e8488a;
+    background: #e8488a11; border: 1px solid #e8488a22;
+    border-radius: 8px; padding: 2px 7px; align-self: flex-start;
   }
-  .section-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; border-bottom: 1px solid #111;
+
+  .bar { height: 3px; background: #111; border-radius: 2px; overflow: hidden; margin: 6px 0 2px; }
+  .fill { height: 100%; border-radius: 2px; transition: width .6s ease; }
+  .fill.cpu { background: linear-gradient(90deg,#e8488a,#ff8ab4); }
+  .fill.ram { background: linear-gradient(90deg,#6b9dff,#a0c0ff); }
+  .fill.bat { background: linear-gradient(90deg,#6bff9d,#a0ffcc); }
+  .fill.bat.low { background: #ff6b6b; }
+
+  .screen-card { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; overflow: hidden; flex: 1; }
+  .card-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-bottom: 1px solid #111;
   }
-  h2 { font-size: 0.72rem; color: #555; text-transform: uppercase; letter-spacing: 1.5px; }
-  .controls { display: flex; align-items: center; gap: 10px; }
-  .select-wrap { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #444; }
+  .card-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #3a3a3a; }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #e8488a;
+    animation: blink 1.2s ease-in-out infinite; flex-shrink: 0;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+  .header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .select-row { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; color: #3a3a3a; }
   select {
-    background: #111; border: 1px solid #1e1e1e; border-radius: 6px;
-    color: #888; padding: 2px 6px; font-size: 0.72rem; cursor: pointer;
+    background: #111; border: 1px solid #1a1a1a; border-radius: 5px;
+    color: #777; padding: 2px 5px; font-size: 0.68rem;
   }
   .btn-sm {
-    background: #111; border: 1px solid #1e1e1e; border-radius: 6px;
-    color: #777; padding: 4px 10px; font-size: 0.72rem; cursor: pointer;
-    transition: all 0.15s;
+    background: #111; border: 1px solid #1a1a1a; border-radius: 5px;
+    color: #666; padding: 3px 9px; font-size: 0.68rem; cursor: pointer;
+    transition: all .15s;
   }
-  .btn-sm:hover:not(:disabled) { border-color: #e8488a55; color: #e8488a; }
-  .btn-sm:disabled { opacity: 0.4; }
+  .btn-sm:hover:not(:disabled) { border-color: #e8488a44; color: #e8488a; }
+  .btn-sm:disabled { opacity: .3; }
 
   .screen-wrap {
     position: relative; display: flex; justify-content: center; align-items: center;
-    padding: 14px; background: #060606; min-height: 180px;
+    padding: 14px; background: #060606; min-height: 160px;
   }
   .screen {
-    max-width: 100%; max-height: 340px;
-    border-radius: 4px; image-rendering: pixelated;
-    border: 1px solid #1a1a1a;
+    max-width: 100%; max-height: 320px; border-radius: 4px;
+    image-rendering: pixelated; border: 1px solid #1a1a1a;
+    transition: opacity .3s;
   }
-  .screen-fallback {
-    position: absolute; display: flex; flex-direction: column;
-    align-items: center; gap: 6px; color: #333; font-size: 0.82rem;
-    text-align: center; pointer-events: none;
+  .screen[style*="opacity: 0"] ~ .no-screen { display: flex; }
+  .no-screen {
+    position: absolute; display: none; flex-direction: column;
+    align-items: center; gap: 6px; color: #2a2a2a; text-align: center; font-size: 0.8rem;
   }
-  .screen:not([style*="none"]) ~ .screen-fallback { display: none; }
-  small { color: #2a2a2a; font-size: 0.7rem; }
+  small { color: #1f1f1f; font-size: 0.68rem; }
 </style>

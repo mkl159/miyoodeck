@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,32 +25,88 @@ const (
 	EmuDir    = "/mnt/SDCARD/Emu"
 	PinFile   = "/mnt/SDCARD/.tmp_update/config/webdeck_pin.txt"
 	FbDevice  = "/dev/fb0"
-	FbWidth   = 640
-	FbHeight  = 480
 )
 
-// tokenStore holds valid session tokens (in-memory, cleared on restart)
-var tokenStore = map[string]time.Time{}
+// ─── Thread-safe token store ──────────────────────────────────────────────────
+
+type tokenStore struct {
+	mu     sync.RWMutex
+	tokens map[string]time.Time
+}
+
+func newTokenStore() *tokenStore {
+	ts := &tokenStore{tokens: make(map[string]time.Time)}
+	go ts.cleanupLoop()
+	return ts
+}
+
+func (ts *tokenStore) set(token string, exp time.Time) {
+	ts.mu.Lock()
+	ts.tokens[token] = exp
+	ts.mu.Unlock()
+}
+
+func (ts *tokenStore) valid(token string) bool {
+	if token == "" {
+		return false
+	}
+	ts.mu.RLock()
+	exp, ok := ts.tokens[token]
+	ts.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	if time.Now().After(exp) {
+		ts.mu.Lock()
+		delete(ts.tokens, token)
+		ts.mu.Unlock()
+		return false
+	}
+	return true
+}
+
+func (ts *tokenStore) delete(token string) {
+	ts.mu.Lock()
+	delete(ts.tokens, token)
+	ts.mu.Unlock()
+}
+
+// cleanupLoop purges expired tokens every 10 minutes (fix: memory leak)
+func (ts *tokenStore) cleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		ts.mu.Lock()
+		for t, exp := range ts.tokens {
+			if now.After(exp) {
+				delete(ts.tokens, t)
+			}
+		}
+		ts.mu.Unlock()
+	}
+}
+
+var sessions = newTokenStore()
 
 func main() {
-	// Show IP address on startup for easy access
 	ip := getLocalIP()
 	fmt.Printf("\n╔══════════════════════════════════════╗\n")
-	fmt.Printf("║       ONION WEB DECK v1.0            ║\n")
+	fmt.Printf("║        MIYOODECK  v1.1               ║\n")
 	fmt.Printf("╠══════════════════════════════════════╣\n")
 	fmt.Printf("║  http://%-28s  ║\n", fmt.Sprintf("%s:%d", ip, Port))
-	fmt.Printf("║  http://%-28s  ║\n", fmt.Sprintf("onion.local:%d", Port))
+	fmt.Printf("║  http://%-28s  ║\n", fmt.Sprintf("miyoodeck.local:%d", Port))
 	fmt.Printf("╚══════════════════════════════════════╝\n\n")
 
 	mux := http.NewServeMux()
 
-	// Auth
+	// Auth (public)
 	mux.HandleFunc("/api/auth/login", handleLogin)
 	mux.HandleFunc("/api/auth/logout", handleLogout)
 	mux.HandleFunc("/api/auth/setup", handleSetupPin)
 	mux.HandleFunc("/api/auth/status", handleAuthStatus)
 
-	// Protected API routes
+	// Protected API
 	mux.HandleFunc("/api/system", auth(handleSystem))
 	mux.HandleFunc("/api/systems", auth(handleSystems))
 	mux.HandleFunc("/api/roms", auth(handleRoms))
@@ -58,16 +115,17 @@ func main() {
 	mux.HandleFunc("/api/upload", auth(handleUpload))
 	mux.HandleFunc("/api/unzip", auth(handleUnzip))
 	mux.HandleFunc("/api/delete", auth(handleDelete))
+	mux.HandleFunc("/api/download", auth(handleDownload))
 	mux.HandleFunc("/api/saves/backup", auth(handleSavesBackup))
 	mux.HandleFunc("/api/screenshot", auth(handleScreenshot))
 	mux.HandleFunc("/api/config/list", auth(handleConfigList))
 	mux.HandleFunc("/api/config", auth(handleConfig))
+	mux.HandleFunc("/api/input/press", auth(handleInputPress))
 	mux.HandleFunc("/ws", auth(handleWS))
 
-	// Serve static frontend files
+	// SPA fallback
 	fs := http.FileServer(http.Dir(StaticDir))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// SPA fallback: serve index.html for unknown paths
 		path := StaticDir + r.URL.Path
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			http.ServeFile(w, r, StaticDir+"/index.html")
@@ -76,16 +134,12 @@ func main() {
 		fs.ServeHTTP(w, r)
 	})
 
-	// Start WebSocket hub
 	go hub.run()
-
-	// Periodically broadcast system stats to all WS clients
 	go broadcastLoop()
+	go startMDNS(ip)
 
-	handler := corsMiddleware(mux)
-
-	log.Printf("WebDeck server listening on :%d", Port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", Port), handler); err != nil {
+	log.Printf("MiyooDeck listening on :%d", Port)
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", Port), corsMiddleware(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -94,23 +148,26 @@ func main() {
 
 func auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth if no PIN is configured
 		if !pinConfigured() {
 			next(w, r)
 			return
 		}
 		// Check cookie
-		cookie, err := r.Cookie("webdeck_token")
-		if err != nil || !validToken(cookie.Value) {
-			// Check Authorization header as fallback
-			header := r.Header.Get("Authorization")
-			token := strings.TrimPrefix(header, "Bearer ")
-			if !validToken(token) {
-				jsonError(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
+		if c, err := r.Cookie("webdeck_token"); err == nil && sessions.valid(c.Value) {
+			next(w, r)
+			return
 		}
-		next(w, r)
+		// Check Authorization header
+		if h := r.Header.Get("Authorization"); sessions.valid(strings.TrimPrefix(h, "Bearer ")) {
+			next(w, r)
+			return
+		}
+		// Fix #2: also check ?token= query param (used by saves backup download link)
+		if t := r.URL.Query().Get("token"); sessions.valid(t) {
+			next(w, r)
+			return
+		}
+		jsonError(w, "Unauthorized", http.StatusUnauthorized)
 	}
 }
 
@@ -141,34 +198,28 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-
 	if !pinConfigured() {
-		// No PIN set — auto-login
 		token := newToken()
 		setTokenCookie(w, token)
-		jsonOK(w, map[string]string{"token": token, "message": "No PIN configured"})
+		jsonOK(w, map[string]string{"token": token})
 		return
 	}
-
 	stored, _ := os.ReadFile(PinFile)
-	hashed := hashPin(req.Pin)
-	if strings.TrimSpace(string(stored)) != hashed {
+	if strings.TrimSpace(string(stored)) != hashPin(req.Pin) {
 		jsonError(w, "Wrong PIN", http.StatusUnauthorized)
 		return
 	}
-
 	token := newToken()
 	setTokenCookie(w, token)
 	jsonOK(w, map[string]string{"token": token})
 }
 
 func handleLogout(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("webdeck_token")
-	if err == nil {
-		delete(tokenStore, cookie.Value)
+	if c, err := r.Cookie("webdeck_token"); err == nil {
+		sessions.delete(c.Value)
 	}
-	http.SetCookie(w, &http.Cookie{Name: "webdeck_token", Value: "", MaxAge: -1})
-	jsonOK(w, map[string]string{"message": "Logged out"})
+	http.SetCookie(w, &http.Cookie{Name: "webdeck_token", Value: "", MaxAge: -1, Path: "/"})
+	jsonOK(w, map[string]string{"message": "ok"})
 }
 
 func handleSetupPin(w http.ResponseWriter, r *http.Request) {
@@ -187,18 +238,15 @@ func handleSetupPin(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "PIN must be at least 4 digits", http.StatusBadRequest)
 		return
 	}
-	hashed := hashPin(req.Pin)
-	if err := os.WriteFile(PinFile, []byte(hashed), 0600); err != nil {
+	if err := os.WriteFile(PinFile, []byte(hashPin(req.Pin)), 0600); err != nil {
 		jsonError(w, "Failed to save PIN: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	jsonOK(w, map[string]string{"message": "PIN set successfully"})
+	jsonOK(w, map[string]string{"message": "PIN set"})
 }
 
 func handleAuthStatus(w http.ResponseWriter, r *http.Request) {
-	jsonOK(w, map[string]interface{}{
-		"pin_configured": pinConfigured(),
-	})
+	jsonOK(w, map[string]bool{"pin_configured": pinConfigured()})
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -217,33 +265,15 @@ func newToken() string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
-	tokenStore[token] = time.Now().Add(24 * time.Hour)
+	sessions.set(token, time.Now().Add(24*time.Hour))
 	return token
-}
-
-func validToken(token string) bool {
-	if token == "" {
-		return false
-	}
-	exp, ok := tokenStore[token]
-	if !ok {
-		return false
-	}
-	if time.Now().After(exp) {
-		delete(tokenStore, token)
-		return false
-	}
-	return true
 }
 
 func setTokenCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "webdeck_token",
-		Value:    token,
-		Path:     "/",
-		MaxAge:   86400,
-		HttpOnly: false,
-		SameSite: http.SameSiteLaxMode,
+		Name: "webdeck_token", Value: token,
+		Path: "/", MaxAge: 86400,
+		HttpOnly: false, SameSite: http.SameSiteLaxMode,
 	})
 }
 
@@ -259,16 +289,12 @@ func jsonError(w http.ResponseWriter, msg string, code int) {
 }
 
 func getLocalIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "unknown"
-	}
+	addrs, _ := net.InterfaceAddrs()
 	for _, addr := range addrs {
 		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-			if ipNet.IP.To4() != nil {
-				ip := ipNet.IP.String()
-				// Prefer wlan0 addresses (192.168.x.x range)
-				if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") {
+			if ip4 := ipNet.IP.To4(); ip4 != nil {
+				ip := ip4.String()
+				if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
 					return ip
 				}
 			}
