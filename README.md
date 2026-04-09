@@ -214,7 +214,7 @@ MiyooDeck
 │   ├── files.go      File listing, upload, zip extraction
 │   ├── games.go      ROM listing + game launch
 │   ├── config.go     Config file editor + .bak backup
-│   ├── screenshot.go /dev/fb0 BGR565 → PNG (color-correct)
+│   ├── screenshot.go /dev/fb0 → PNG (auto-detect 16/32-bit, FBIOGET_VSCREENINFO)
 │   ├── input.go      Button injection → /dev/input/event0 (Onion keycodes)
 │   ├── websocket.go  Real-time stats + screenshot broadcast (panic-safe)
 │   └── mdns.go       mDNS responder → miyoodeck.local
@@ -244,9 +244,9 @@ MiyooDeck écrit une commande dans `/mnt/SDCARD/.tmp_update/cmd_to_run.sh` et en
 MiyooDeck writes a command to `/mnt/SDCARD/.tmp_update/cmd_to_run.sh` and sends `killall -9 MainUI`. Onion's runtime detects this file and launches the game automatically.
 
 ### Capture d'écran / Screenshot
-Le framebuffer `/dev/fb0` est lu en format **BGR565** (le Miyoo Mini inverse les canaux rouge/bleu). Chaque pixel est converti en RGB888 et encodé en PNG avec `io.ReadFull` pour éviter les artéfacts.
+Le framebuffer `/dev/fb0` est lu via `FBIOGET_VSCREENINFO` pour auto-détecter le format pixel au runtime : **BGR565 16-bit** (Miyoo Mini original) ou **ABGR8888 32-bit** (Miyoo Mini Plus). L'image est corrigée en rotation 180° et encodée en JPEG pour la diffusion WebSocket (5× plus rapide que PNG sur ARM).
 
-The framebuffer `/dev/fb0` is read as **BGR565** (Miyoo Mini swaps red/blue channels). Each pixel is converted to RGB888 and encoded as PNG using `io.ReadFull` to avoid artifacts.
+The framebuffer `/dev/fb0` is queried via `FBIOGET_VSCREENINFO` to auto-detect the pixel format at runtime: **BGR565 16-bit** (original Miyoo Mini) or **ABGR8888 32-bit** (Miyoo Mini Plus). The image is corrected for 180° rotation and encoded as JPEG for WebSocket streaming (5× faster than PNG on ARM).
 
 ### Contrôleur / Controller
 Les pressions de boutons sont injectées dans `/dev/input/event0` via des structs `input_event` Linux (16 octets, ARM 32-bit). Les codes touches correspondent à `keymap_hw.h` d'Onion OS.

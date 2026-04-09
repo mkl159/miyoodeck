@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type System struct {
@@ -193,6 +194,17 @@ func handleLaunch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fix #5: if a game (retroarch) is already running, send a safe quit signal
+	// instead of hard-killing — avoids save corruption
+	if isGameRunning() {
+		// Ask RetroArch to quit cleanly via its network command interface
+		exec.Command("sh", "-c",
+			`echo -e "QUIT\n" | nc -u -w1 127.0.0.1 55355 2>/dev/null || `+
+				`killall -15 retroarch 2>/dev/null`).Run()
+		// Give it 2 seconds to save and exit
+		time.Sleep(2 * time.Second)
+	}
+
 	// Write the launch command
 	cmdFile := SysDir + "/cmd_to_run.sh"
 	if err := os.WriteFile(cmdFile, []byte(launchCmd), 0755); err != nil {
@@ -244,6 +256,12 @@ func buildLaunchCommand(romPath, system string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no emulator found for system %q", system)
+}
+
+// isGameRunning returns true if retroarch or a game emulator is currently active.
+func isGameRunning() bool {
+	out, err := exec.Command("pgrep", "-x", "retroarch").Output()
+	return err == nil && len(out) > 0
 }
 
 func findCore(system string) string {
