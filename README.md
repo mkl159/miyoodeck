@@ -9,6 +9,7 @@
 *Un dashboard web complet pour contrôler ta console à distance*  
 *A complete web dashboard to remotely control your console*
 
+[![Release](https://img.shields.io/github/v/release/mkl159/miyoodeck?style=flat-square&color=e8488a)](https://github.com/mkl159/miyoodeck/releases)
 [![Onion OS](https://img.shields.io/badge/Onion%20OS-4.3%2B-e8488a?style=flat-square)](https://github.com/OnionUI/Onion)
 [![Platform](https://img.shields.io/badge/Platform-Miyoo%20Mini%20%2F%20Mini%2B-6bff9d?style=flat-square)](#)
 [![Language](https://img.shields.io/badge/Lang-FR%20%2F%20EN-blue?style=flat-square)](#)
@@ -29,8 +30,9 @@ MiyooDeck est un **third-party pour Onion OS** qui transforme ton Miyoo Mini (ou
 
 - 📊 **Surveiller** l'état de la console (CPU, RAM, batterie, IP)
 - 🎮 **Lancer des jeux** à distance d'un simple clic
+- 🕹️ **Contrôler la console** avec le gamepad intégré (croix directionnelle, ABXY, L1/R1/L2/R2, SELECT/START/MENU, volume)
 - 📁 **Gérer tes fichiers** — uploader des ROMs par drag & drop, télécharger tes sauvegardes
-- 🖥️ **Voir l'écran en direct** (capture du framebuffer)
+- 🖥️ **Voir l'écran en direct** avec les couleurs correctes (capture framebuffer BGR565)
 - ⚙️ **Éditer les configs** RetroArch, Onion, etc. avec sauvegarde automatique
 
 ### Prérequis
@@ -92,7 +94,7 @@ npm install && npm run build
 
 | Onglet | Fonction |
 |--------|----------|
-| 📊 Tableau de bord | Stats système + aperçu de l'écran en direct |
+| 📊 Tableau de bord | Stats système + gamepad + aperçu de l'écran en direct |
 | 🎮 Jeux | Parcourir et lancer des jeux par système |
 | 📁 Fichiers | Uploader des ROMs, télécharger les sauvegardes |
 | ⚙️ Config | Éditer les fichiers de configuration |
@@ -123,8 +125,9 @@ MiyooDeck is an **Onion OS third-party app** that lets you control your Miyoo Mi
 
 - 📊 **Monitor** system status (CPU, RAM, battery, IP address)
 - 🎮 **Launch games** remotely with a single click
+- 🕹️ **Control the console** with the built-in gamepad (D-pad, ABXY, L1/R1/L2/R2, SELECT/START/MENU, volume)
 - 📁 **Manage files** — drag & drop ROM upload, save games download
-- 🖥️ **Live screen view** (framebuffer capture, 1-5 FPS)
+- 🖥️ **Live screen view** with correct colors (BGR565 framebuffer capture, 1-5 FPS)
 - ⚙️ **Edit configs** (RetroArch, Onion) with automatic backup
 
 ### Requirements
@@ -185,7 +188,7 @@ npm install && npm run build
 
 | Tab | Function |
 |-----|----------|
-| 📊 Dashboard | System stats + live screen preview |
+| 📊 Dashboard | System stats + gamepad controller + live screen |
 | 🎮 Games | Browse and launch games by system |
 | 📁 Files | Upload ROMs, download save backups |
 | ⚙️ Config | Edit configuration files |
@@ -205,30 +208,33 @@ Or simply restart the console.
 
 ```
 MiyooDeck
-├── server/          Go backend (ARM daemon)
-│   ├── main.go      HTTP server + auth + routing
-│   ├── system.go    CPU/RAM/battery via /proc & /sys
-│   ├── files.go     File listing, upload, zip extraction
-│   ├── games.go     ROM listing + game launch
-│   ├── config.go    Config file editor + .bak backup
-│   ├── screenshot.go /dev/fb0 RGB565 → PNG
-│   └── websocket.go Real-time stats + screenshot broadcast
-└── frontend/        Svelte 4 + Vite SPA
+├── server/           Go backend (ARM daemon)
+│   ├── main.go       HTTP server + auth + routing
+│   ├── system.go     CPU/RAM/battery via /proc & /sys (async sampling)
+│   ├── files.go      File listing, upload, zip extraction
+│   ├── games.go      ROM listing + game launch
+│   ├── config.go     Config file editor + .bak backup
+│   ├── screenshot.go /dev/fb0 BGR565 → PNG (color-correct)
+│   ├── input.go      Button injection → /dev/input/event0 (Onion keycodes)
+│   ├── websocket.go  Real-time stats + screenshot broadcast (panic-safe)
+│   └── mdns.go       mDNS responder → miyoodeck.local
+└── frontend/         Svelte 4 + Vite SPA
     └── src/
-        ├── i18n.js          FR/EN translations
-        ├── api.js           API client + WebSocket
-        ├── App.svelte       Layout + auth + lang switcher
+        ├── i18n.js           FR/EN translations
+        ├── api.js            API client + WebSocket
+        ├── App.svelte        Layout + auth + lang switcher
         └── components/
-            ├── Dashboard.svelte
+            ├── Dashboard.svelte    Stats + gamepad + live screen
+            ├── Controller.svelte   Gamepad UI (D-pad, ABXY, shoulders…)
             ├── GameLauncher.svelte
             ├── FileManager.svelte
             └── ConfigEditor.svelte
 ```
 
-**Binary size**: ~6.4 MB (stripped)  
-**Frontend size**: ~52 KB JS + 19 KB CSS  
-**Total package**: ~6.5 MB  
-**RAM usage**: < 10 MB at rest, ~12 MB under load
+**Binary size**: ~6.5 MB (stripped ARM)  
+**Frontend size**: ~63 KB JS + 24 KB CSS  
+**Total package**: ~6.6 MB  
+**RAM usage**: ~8 MB at rest, ~12 MB under load
 
 ## Fonctionnement interne / How it works
 
@@ -238,9 +244,14 @@ MiyooDeck écrit une commande dans `/mnt/SDCARD/.tmp_update/cmd_to_run.sh` et en
 MiyooDeck writes a command to `/mnt/SDCARD/.tmp_update/cmd_to_run.sh` and sends `killall -9 MainUI`. Onion's runtime detects this file and launches the game automatically.
 
 ### Capture d'écran / Screenshot
-Le framebuffer `/dev/fb0` est lu en format RGB565 (16 bits par pixel, 640×480). Chaque pixel est converti en RGB888 et encodé en PNG.
+Le framebuffer `/dev/fb0` est lu en format **BGR565** (le Miyoo Mini inverse les canaux rouge/bleu). Chaque pixel est converti en RGB888 et encodé en PNG avec `io.ReadFull` pour éviter les artéfacts.
 
-The framebuffer `/dev/fb0` is read as RGB565 (16 bits per pixel, 640×480). Each pixel is converted to RGB888 and encoded as PNG.
+The framebuffer `/dev/fb0` is read as **BGR565** (Miyoo Mini swaps red/blue channels). Each pixel is converted to RGB888 and encoded as PNG using `io.ReadFull` to avoid artifacts.
+
+### Contrôleur / Controller
+Les pressions de boutons sont injectées dans `/dev/input/event0` via des structs `input_event` Linux (16 octets, ARM 32-bit). Les codes touches correspondent à `keymap_hw.h` d'Onion OS.
+
+Button presses are injected into `/dev/input/event0` via Linux `input_event` structs (16 bytes, ARM 32-bit). Key codes match Onion OS's `keymap_hw.h`.
 
 ### Mode veille / Sleep mode
 Aucun client WebSocket connecté = la diffusion stats/screenshot s'arrête automatiquement pour économiser les ressources du processeur.
