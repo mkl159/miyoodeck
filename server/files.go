@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -72,6 +73,40 @@ func listFiles(w http.ResponseWriter, path string) {
 	})
 }
 
+// handleDownload streams a single file to the client (fix #10)
+func handleDownload(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		jsonError(w, "Missing path", http.StatusBadRequest)
+		return
+	}
+	path = filepath.Clean(path)
+	if !strings.HasPrefix(path, SDCard) {
+		jsonError(w, "Access denied", http.StatusForbidden)
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		jsonError(w, "File not found", http.StatusNotFound)
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		jsonError(w, "Cannot open file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	ct := mime.TypeByExtension(filepath.Ext(path))
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filepath.Base(path)))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", info.Size()))
+	io.Copy(w, f)
+}
+
 func handleDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
 		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -100,7 +135,8 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(2 << 30); err != nil {
+	// 32 MB in memory; larger files go to temp files on disk (safe on Miyoo Mini)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		jsonError(w, "Parse error: "+err.Error(), http.StatusBadRequest)
 		return
 	}

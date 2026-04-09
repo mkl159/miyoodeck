@@ -7,8 +7,34 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"math"
 	"time"
 )
+
+// cpuUsageCache stores the last computed CPU % as a uint64 (IEEE 754 bits).
+// Updated by a background goroutine so readCPUUsage() is non-blocking.
+var cpuUsageCache uint64
+
+func init() {
+	go func() {
+		for {
+			s1 := readCPUStat()
+			time.Sleep(200 * time.Millisecond)
+			s2 := readCPUStat()
+			var pct float64
+			if s1 != nil && s2 != nil {
+				idle := float64(s2[3] - s1[3])
+				total := float64(sum(s2) - sum(s1))
+				if total > 0 {
+					pct = (1.0 - idle/total) * 100.0
+				}
+			}
+			atomic.StoreUint64(&cpuUsageCache, math.Float64bits(pct))
+			time.Sleep(1800 * time.Millisecond)
+		}
+	}()
+}
 
 type SystemInfo struct {
 	CPU     float64 `json:"cpu_percent"`
@@ -44,28 +70,7 @@ func handleSystem(w http.ResponseWriter, r *http.Request) {
 }
 
 func readCPUUsage() float64 {
-	// Read /proc/stat twice, 200ms apart, to get CPU usage %
-	s1 := readCPUStat()
-	time.Sleep(200 * time.Millisecond)
-	s2 := readCPUStat()
-
-	if s1 == nil || s2 == nil {
-		return 0
-	}
-
-	idle1 := s1[3]
-	idle2 := s2[3]
-
-	total1 := sum(s1)
-	total2 := sum(s2)
-
-	totalDiff := float64(total2 - total1)
-	idleDiff := float64(idle2 - idle1)
-
-	if totalDiff == 0 {
-		return 0
-	}
-	return (1.0 - idleDiff/totalDiff) * 100.0
+	return math.Float64frombits(atomic.LoadUint64(&cpuUsageCache))
 }
 
 func readCPUStat() []int64 {

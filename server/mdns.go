@@ -14,6 +14,23 @@ const mdnsAddr = "224.0.0.251:5353"
 
 // startMDNS annonce miyoodeck.local → ip sur le réseau local.
 func startMDNS(ip string) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("mDNS panic (non-fatal): %v", r)
+		}
+	}()
+
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		log.Printf("mDNS: invalid IP %q, skipping", ip)
+		return
+	}
+	parsedIP := parsed.To4()
+	if parsedIP == nil {
+		log.Printf("mDNS: not an IPv4 address: %q, skipping", ip)
+		return
+	}
+
 	addr, err := net.ResolveUDPAddr("udp4", mdnsAddr)
 	if err != nil {
 		log.Printf("mDNS: resolve error: %v", err)
@@ -27,12 +44,7 @@ func startMDNS(ip string) {
 	}
 	defer conn.Close()
 
-	parsedIP := net.ParseIP(ip).To4()
-	if parsedIP == nil {
-		return
-	}
-
-	log.Printf("mDNS: listening, announcing miyoodeck.local → %s", ip)
+	log.Printf("mDNS: listening, announcing miyoodeck.local → %s", parsedIP)
 
 	buf := make([]byte, 1500)
 	for {

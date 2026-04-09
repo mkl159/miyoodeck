@@ -35,18 +35,25 @@ type Client struct {
 
 var hub = &Hub{
 	clients:    make(map[*Client]bool),
-	broadcast:  make(chan []byte, 64),
-	register:   make(chan *Client),
-	unregister: make(chan *Client),
+	broadcast:  make(chan []byte, 128),
+	register:   make(chan *Client, 16),
+	unregister: make(chan *Client, 16),
 }
 
 func (h *Hub) run() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("hub.run panic recovered: %v — restarting", r)
+			go h.run()
+		}
+	}()
 	for {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
+
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
@@ -54,14 +61,16 @@ func (h *Hub) run() {
 				close(client.send)
 			}
 			h.mu.Unlock()
+
 		case message := <-h.broadcast:
 			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					close(client.send)
+					// Client is too slow — disconnect it cleanly
 					delete(h.clients, client)
+					close(client.send)
 				}
 			}
 			h.mu.Unlock()
@@ -73,6 +82,16 @@ func (h *Hub) clientCount() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return len(h.clients)
+}
+
+// safeBroadcast sends to hub without blocking (drops the message if the
+// broadcast channel is full to avoid deadlocking broadcastLoop).
+func safeBroadcast(data []byte) {
+	select {
+	case hub.broadcast <- data:
+	default:
+		// channel full — drop this frame rather than stalling
+	}
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
@@ -96,6 +115,9 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 func (c *Client) writePump() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("writePump panic: %v", r)
+		}
 		ticker.Stop()
 		c.conn.Close()
 	}()
@@ -103,11 +125,11 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if !ok {
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				return
 			}
@@ -122,11 +144,25 @@ func (c *Client) writePump() {
 
 func (c *Client) readPump() {
 	defer func() {
-		hub.unregister <- c
+		if r := recover(); r != nil {
+			log.Printf("readPump panic: %v", r)
+		}
+		// Use non-blocking unregister to avoid deadlock if hub is stuck
+		select {
+		case hub.unregister <- c:
+		default:
+			// hub channel full — force-remove the client
+			hub.mu.Lock()
+			if _, ok := hub.clients[c]; ok {
+				delete(hub.clients, c)
+				close(c.send)
+			}
+			hub.mu.Unlock()
+		}
 		c.conn.Close()
 	}()
 
-	c.conn.SetReadLimit(512)
+	c.conn.SetReadLimit(4096)
 	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
 		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -147,8 +183,15 @@ type WSMessage struct {
 }
 
 // broadcastLoop sends system stats to all connected clients.
-// Screenshot is only sent if clients are connected (saves CPU).
+// CPU is sampled by a background goroutine (non-blocking here).
 func broadcastLoop() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("broadcastLoop panic: %v — restarting", r)
+			go broadcastLoop()
+		}
+	}()
+
 	statsTicker := time.NewTicker(2 * time.Second)
 	screenshotTicker := time.NewTicker(3 * time.Second)
 	defer statsTicker.Stop()
@@ -158,7 +201,7 @@ func broadcastLoop() {
 		select {
 		case <-statsTicker.C:
 			if hub.clientCount() == 0 {
-				continue // No clients → sleep mode
+				continue
 			}
 			info := SystemInfo{
 				CPU:     readCPUUsage(),
@@ -168,21 +211,36 @@ func broadcastLoop() {
 				Uptime:  readUptime(),
 				CPUFreq: readCPUFreq(),
 			}
-			msg := WSMessage{Type: "stats", Data: info}
-			data, _ := json.Marshal(msg)
-			hub.broadcast <- data
+			msg := WSMessage{Type: "stats", Data: map[string]interface{}{
+				"cpu_percent":  info.CPU,
+				"ram":          info.RAM,
+				"battery":      info.Battery,
+				"ip":           info.IP,
+				"uptime":       info.Uptime,
+				"cpu_freq_mhz": info.CPUFreq,
+				"game_running": isGameRunning(),
+			}}
+			if data, err := json.Marshal(msg); err == nil {
+				safeBroadcast(data)
+			}
 
 		case <-screenshotTicker.C:
 			if hub.clientCount() == 0 {
 				continue
+			}
+			if isGameRunning() {
+				screenshotTicker.Reset(5 * time.Second)
+			} else {
+				screenshotTicker.Reset(3 * time.Second)
 			}
 			b64 := screenshotBase64()
 			if b64 == "" {
 				continue
 			}
 			msg := WSMessage{Type: "screenshot", Data: b64}
-			data, _ := json.Marshal(msg)
-			hub.broadcast <- data
+			if data, err := json.Marshal(msg); err == nil {
+				safeBroadcast(data)
+			}
 		}
 	}
 }
