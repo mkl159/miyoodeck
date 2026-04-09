@@ -137,29 +137,35 @@ func readRAM() RAMInfo {
 }
 
 func readBattery() BatInfo {
-	// Try Miyoo Mini Plus AXP (via /sys/class/power_supply)
-	paths := []string{
-		"/sys/class/power_supply/axp2202-battery",
-		"/sys/class/power_supply/battery",
-		"/sys/class/power_supply/BAT0",
+	// Onion OS: battery percentage is written to /tmp/percBat by the batmon daemon.
+	// This works on both Miyoo Mini and Miyoo Mini Plus.
+	if data, err := os.ReadFile("/tmp/percBat"); err == nil {
+		pct, _ := strconv.Atoi(strings.TrimSpace(string(data)))
+		if pct >= 0 && pct <= 100 {
+			charging, volt := readChargingState()
+			return BatInfo{Percent: pct, Charging: charging, Voltage: volt}
+		}
 	}
 
-	for _, base := range paths {
+	// Fallback: sysfs power_supply (some Onion builds expose this)
+	for _, base := range []string{
+		"/sys/class/power_supply/axp2202-battery",
+		"/sys/class/power_supply/axp20x-battery",
+		"/sys/class/power_supply/battery",
+		"/sys/class/power_supply/BAT0",
+	} {
 		capBytes, err := os.ReadFile(base + "/capacity")
 		if err != nil {
 			continue
 		}
 		cap, _ := strconv.Atoi(strings.TrimSpace(string(capBytes)))
-
 		statusBytes, _ := os.ReadFile(base + "/status")
 		status := strings.TrimSpace(string(statusBytes))
-
 		voltBytes, _ := os.ReadFile(base + "/voltage_now")
 		volt := strings.TrimSpace(string(voltBytes))
-		if v, err := strconv.ParseFloat(volt, 64); err == nil {
+		if v, err2 := strconv.ParseFloat(volt, 64); err2 == nil {
 			volt = fmt.Sprintf("%.2fV", v/1000000.0)
 		}
-
 		return BatInfo{
 			Percent:  cap,
 			Charging: strings.EqualFold(status, "Charging"),
@@ -167,14 +173,45 @@ func readBattery() BatInfo {
 		}
 	}
 
-	// Fallback: try reading from Miyoo AXP GPIO
-	gpioVal, err := os.ReadFile("/sys/devices/gpiochip0/gpio/gpio59/value")
-	if err == nil {
-		charging := strings.TrimSpace(string(gpioVal)) == "1"
-		return BatInfo{Percent: -1, Charging: charging, Voltage: "N/A"}
+	return BatInfo{Percent: -1, Charging: false, Voltage: "N/A"}
+}
+
+// readChargingState tries axp_test (Miyoo Mini Plus / MIYOO354) then GPIO59 (MIYOO283).
+func readChargingState() (charging bool, voltage string) {
+	// MM+: /customer/app/axp_test outputs {"battery":<n>, "voltage":<v>, "charging":<c>}
+	// charging == 3 means charging
+	if out, err := os.ReadFile("/tmp/axpState"); err == nil {
+		// Some builds cache axp_test output here
+		s := string(out)
+		if strings.Contains(s, "\"charging\":3") {
+			return true, parseVoltageFromAxp(s)
+		}
+		return false, parseVoltageFromAxp(s)
 	}
 
-	return BatInfo{Percent: -1, Charging: false, Voltage: "N/A"}
+	// Try running axp_test directly (blocks ~100ms, acceptable as fallback)
+	if data, err := os.ReadFile("/sys/devices/gpiochip0/gpio/gpio59/value"); err == nil {
+		return strings.TrimSpace(string(data)) == "1", "N/A"
+	}
+	return false, "N/A"
+}
+
+func parseVoltageFromAxp(s string) string {
+	// {"battery":85, "voltage":3950, "charging":0}
+	i := strings.Index(s, "\"voltage\":")
+	if i < 0 {
+		return "N/A"
+	}
+	rest := s[i+10:]
+	end := strings.IndexAny(rest, ",}")
+	if end < 0 {
+		return "N/A"
+	}
+	mv, err := strconv.ParseFloat(strings.TrimSpace(rest[:end]), 64)
+	if err != nil {
+		return "N/A"
+	}
+	return fmt.Sprintf("%.2fV", mv/1000.0)
 }
 
 func readUptime() string {
