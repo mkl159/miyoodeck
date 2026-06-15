@@ -177,7 +177,7 @@ func handleLaunch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.RomPath = filepath.Clean(req.RomPath)
-	if !strings.HasPrefix(req.RomPath, SDCard) {
+	if !withinSD(req.RomPath) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
@@ -267,21 +267,21 @@ func isGameRunning() bool {
 func findCore(system string) string {
 	// Map common system names to core names
 	coreMap := map[string]string{
-		"GBA":    "gpsp_libretro",
-		"GBC":    "gambatte_libretro",
-		"GB":     "gambatte_libretro",
-		"SFC":    "snes9x2005_plus_libretro",
-		"SNES":   "snes9x2005_plus_libretro",
-		"FC":     "fceumm_libretro",
-		"NES":    "fceumm_libretro",
-		"MD":     "picodrive_libretro",
-		"SMS":    "picodrive_libretro",
-		"PS":     "pcsx_rearmed_libretro",
-		"PSX":    "pcsx_rearmed_libretro",
-		"PCE":    "mednafen_pce_fast_libretro",
-		"NGP":    "mednafen_ngp_libretro",
-		"GG":     "genesis_plus_gx_libretro",
-		"WSWAN":  "mednafen_wswan_libretro",
+		"GBA":   "gpsp_libretro",
+		"GBC":   "gambatte_libretro",
+		"GB":    "gambatte_libretro",
+		"SFC":   "snes9x2005_plus_libretro",
+		"SNES":  "snes9x2005_plus_libretro",
+		"FC":    "fceumm_libretro",
+		"NES":   "fceumm_libretro",
+		"MD":    "picodrive_libretro",
+		"SMS":   "picodrive_libretro",
+		"PS":    "pcsx_rearmed_libretro",
+		"PSX":   "pcsx_rearmed_libretro",
+		"PCE":   "mednafen_pce_fast_libretro",
+		"NGP":   "mednafen_ngp_libretro",
+		"GG":    "genesis_plus_gx_libretro",
+		"WSWAN": "mednafen_wswan_libretro",
 	}
 
 	coreName, ok := coreMap[strings.ToUpper(system)]

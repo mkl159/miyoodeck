@@ -3,12 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"math"
 	"time"
 )
 

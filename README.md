@@ -69,7 +69,7 @@ Carte SD/
 ```bash
 # Prérequis : Go 1.21+, Node.js 18+
 git clone https://github.com/TON_USERNAME/miyoodeck
-cd miyoodeck/webdeck
+cd miyoodeck
 
 # Compiler le binaire ARM
 cd server
@@ -81,7 +81,7 @@ GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
 cd ../frontend
 npm install && npm run build
 
-# Le package est prêt dans : webdeck/package/App/WebDeck/
+# Le package est prêt dans : package/App/WebDeck/
 ```
 
 ### Utilisation
@@ -164,7 +164,7 @@ SD Card/
 ```bash
 # Requirements: Go 1.21+, Node.js 18+
 git clone https://github.com/YOUR_USERNAME/miyoodeck
-cd miyoodeck/webdeck
+cd miyoodeck
 
 # Compile ARM binary
 cd server
@@ -175,7 +175,7 @@ GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
 cd ../frontend
 npm install && npm run build
 
-# Package ready at: webdeck/package/App/WebDeck/
+# Package ready at: package/App/WebDeck/
 ```
 
 ### Usage

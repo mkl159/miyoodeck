@@ -24,6 +24,9 @@
 
   // Fix #8: use a single clean URL with fresh ts each time
   $: screenshotSrc = screenshot || api.screenshotUrl(ts)
+  // Reset the load-error flag whenever the source changes so each refresh retries
+  let imgError = false
+  $: screenshotSrc, (imgError = false)
 
   async function saveScreenshot() {
     downloading = true
@@ -86,7 +89,7 @@
       <div class="label">{$t.network}</div>
       <div class="value ip">{stats?.ip ?? '—'}</div>
       {#if stats}<small>↑ {stats.uptime}</small>{/if}
-      {#if gameOn}<div class="game-badge">🎮 En jeu</div>{/if}
+      {#if gameOn}<div class="game-badge">🎮 {$t.gameRunning}</div>{/if}
     </div>
   </div>
 
@@ -116,17 +119,16 @@
     </div>
 
     <div class="screen-wrap">
-      <!-- Fix #3: removed dead <script context="module"> -->
-      {#if screenshotSrc}
+      {#if screenshotSrc && !imgError}
         <img src={screenshotSrc} alt="Miyoo screen" class="screen"
-          on:error={(e) => { e.target.style.opacity = 0 }}
-          on:load={(e) => { e.target.style.opacity = 1 }}
+          on:error={() => imgError = true}
         />
+      {:else}
+        <div class="no-screen">
+          <span>{$t.screenUnavailable}</span>
+          <small>{$t.startGame}</small>
+        </div>
       {/if}
-      <div class="no-screen">
-        <span>{$t.screenUnavailable}</span>
-        <small>{$t.startGame}</small>
-      </div>
     </div>
   </div>
 </div>
@@ -191,11 +193,9 @@
   .screen {
     max-width: 100%; max-height: 320px; border-radius: 4px;
     image-rendering: pixelated; border: 1px solid #1a1a1a;
-    transition: opacity .3s;
   }
-  .screen[style*="opacity: 0"] ~ .no-screen { display: flex; }
   .no-screen {
-    position: absolute; display: none; flex-direction: column;
+    display: flex; flex-direction: column;
     align-items: center; gap: 6px; color: #2a2a2a; text-align: center; font-size: 0.8rem;
   }
   small { color: #1f1f1f; font-size: 0.68rem; }

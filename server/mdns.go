@@ -94,10 +94,10 @@ func buildMDNSResponse(ip net.IP) []byte {
 	// Answer RR: TYPE=A(1), CLASS=IN(1) | FLUSH(0x8000), TTL=120, RDATA=4 bytes IP
 	rr := []byte{}
 	rr = append(rr, name...)
-	rr = append(rr, 0x00, 0x01) // TYPE A
-	rr = append(rr, 0x80, 0x01) // CLASS IN + cache-flush bit
-	rr = append(rr, 0x00, 0x00, 0x00, 0x78) // TTL = 120s
-	rr = append(rr, 0x00, 0x04) // RDLENGTH = 4
+	rr = append(rr, 0x00, 0x01)                 // TYPE A
+	rr = append(rr, 0x80, 0x01)                 // CLASS IN + cache-flush bit
+	rr = append(rr, 0x00, 0x00, 0x00, 0x78)     // TTL = 120s
+	rr = append(rr, 0x00, 0x04)                 // RDLENGTH = 4
 	rr = append(rr, ip[0], ip[1], ip[2], ip[3]) // RDATA
 
 	return append(hdr, rr...)

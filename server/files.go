@@ -28,7 +28,7 @@ func handleFiles(w http.ResponseWriter, r *http.Request) {
 		path = SDCard
 	}
 	path = filepath.Clean(path)
-	if !strings.HasPrefix(path, SDCard) {
+	if !withinSD(path) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
@@ -81,7 +81,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path = filepath.Clean(path)
-	if !strings.HasPrefix(path, SDCard) {
+	if !withinSD(path) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
@@ -118,7 +118,7 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path = filepath.Clean(path)
-	if !strings.HasPrefix(path, SDCard) {
+	if !withinSD(path) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
@@ -146,7 +146,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		destDir = RomsDir
 	}
 	destDir = filepath.Clean(destDir)
-	if !strings.HasPrefix(destDir, SDCard) {
+	if !withinSD(destDir) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
@@ -201,7 +201,7 @@ func handleUnzip(w http.ResponseWriter, r *http.Request) {
 	}
 	req.DestDir = filepath.Clean(req.DestDir)
 
-	if !strings.HasPrefix(req.ZipPath, SDCard) || !strings.HasPrefix(req.DestDir, SDCard) {
+	if !withinSD(req.ZipPath) || !withinSD(req.DestDir) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}

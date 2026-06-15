@@ -4,3 +4,4 @@ server/webdeck.exe
 server/webdeck-linux
 *.log
 build-output/
+server/webdeck

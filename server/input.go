@@ -23,23 +23,23 @@ const (
 	evSyn = 0
 
 	// Key codes from linux/input.h (matches Onion keymap_hw.h)
-	keyUp        = 103
-	keyDown      = 108
-	keyLeft      = 105
-	keyRight     = 106
-	keyA         = 57  // KEY_SPACE
-	keyB         = 29  // KEY_LEFTCTRL
-	keyX         = 42  // KEY_LEFTSHIFT
-	keyY         = 56  // KEY_LEFTALT
-	keyL1        = 18  // KEY_E
-	keyR1        = 20  // KEY_T
-	keyL2        = 15  // KEY_TAB
-	keyR2        = 14  // KEY_BACKSPACE
-	keySelect    = 97  // KEY_RIGHTCTRL
-	keyStart     = 28  // KEY_ENTER
-	keyMenu      = 1   // KEY_ESC
-	keyVolumeUp  = 115 // KEY_VOLUMEUP
-	keyVolumeDn  = 114 // KEY_VOLUMEDOWN
+	keyUp       = 103
+	keyDown     = 108
+	keyLeft     = 105
+	keyRight    = 106
+	keyA        = 57  // KEY_SPACE
+	keyB        = 29  // KEY_LEFTCTRL
+	keyX        = 42  // KEY_LEFTSHIFT
+	keyY        = 56  // KEY_LEFTALT
+	keyL1       = 18  // KEY_E
+	keyR1       = 20  // KEY_T
+	keyL2       = 15  // KEY_TAB
+	keyR2       = 14  // KEY_BACKSPACE
+	keySelect   = 97  // KEY_RIGHTCTRL
+	keyStart    = 28  // KEY_ENTER
+	keyMenu     = 1   // KEY_ESC
+	keyVolumeUp = 115 // KEY_VOLUMEUP
+	keyVolumeDn = 114 // KEY_VOLUMEDOWN
 )
 
 var buttonMap = map[string]uint16{

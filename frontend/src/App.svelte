@@ -92,16 +92,16 @@
     <!-- Fix #13: friendly WiFi error page -->
     <div class="splash">
       <div class="err-icon">📡</div>
-      <span class="title err">Connexion impossible</span>
+      <span class="title err">{$t.connErrTitle}</span>
       <div class="err-card">
-        <p>MiyooDeck ne répond pas sur <code>:{8080}</code></p>
+        <p>{$t.connErrMsg} <code>:8080</code></p>
         <ol>
-          <li>Assure-toi que la Miyoo est <strong>allumée</strong></li>
-          <li>Lance <strong>Apps → Web Deck</strong> sur la console</li>
-          <li>Vérifie que le <strong>WiFi est activé</strong></li>
-          <li>Recharge cette page</li>
+          <li>{$t.connErrStep1}</li>
+          <li>{$t.connErrStep2}</li>
+          <li>{$t.connErrStep3}</li>
+          <li>{$t.connErrStep4}</li>
         </ol>
-        <button class="btn-retry" on:click={() => location.reload()}>🔄 Réessayer</button>
+        <button class="btn-retry" on:click={() => location.reload()}>{$t.connErrRetry}</button>
       </div>
     </div>
 
@@ -116,7 +116,7 @@
       <span class="brand">MiyooDeck</span>
       <div class="right">
         {#if stats?.game_running}
-          <span class="badge game">🎮 En jeu</span>
+          <span class="badge game">🎮 {$t.gameRunning}</span>
         {/if}
         {#if stats}
           <span class="badge" class:charging={stats.battery.charging}>
@@ -181,7 +181,7 @@
   .err-card p{font-size:0.85rem;color:#888}
   .err-card code{color:#e8488a;background:#e8488a11;padding:1px 5px;border-radius:4px}
   .err-card ol{padding-left:18px;font-size:0.82rem;color:#666;display:flex;flex-direction:column;gap:5px}
-  .err-card strong{color:#ccc}
+  .err-card li{color:#ccc}
   .btn-retry{background:linear-gradient(135deg,#e8488a,#c42d6e);border:none;border-radius:8px;color:#fff;padding:9px;font-size:0.85rem;font-weight:700;cursor:pointer;transition:all .2s}
   .btn-retry:hover{transform:translateY(-1px);box-shadow:0 4px 16px #e8488a44}
 

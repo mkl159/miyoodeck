@@ -92,7 +92,7 @@ var sessions = newTokenStore()
 func main() {
 	ip := getLocalIP()
 	fmt.Printf("\n╔══════════════════════════════════════╗\n")
-	fmt.Printf("║        MIYOODECK  v1.1               ║\n")
+	fmt.Printf("║        MIYOODECK  v1.6               ║\n")
 	fmt.Printf("╠══════════════════════════════════════╣\n")
 	fmt.Printf("║  http://%-28s  ║\n", fmt.Sprintf("%s:%d", ip, Port))
 	fmt.Printf("║  http://%-28s  ║\n", fmt.Sprintf("miyoodeck.local:%d", Port))
@@ -254,6 +254,13 @@ func handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 func pinConfigured() bool {
 	_, err := os.Stat(PinFile)
 	return err == nil
+}
+
+// withinSD reports whether a cleaned path is the SD card root or strictly
+// inside it. Using a trailing "/" guard prevents a sibling like
+// "/mnt/SDCARDevil" from passing a naive HasPrefix check.
+func withinSD(path string) bool {
+	return path == SDCard || strings.HasPrefix(path, SDCard+"/")
 }
 
 func hashPin(pin string) string {

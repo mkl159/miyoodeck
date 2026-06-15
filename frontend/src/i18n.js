@@ -6,6 +6,16 @@ const translations = {
     appName: 'MiyooDeck',
     appTagline: 'Ton Miyoo dans ton navigateur',
     connecting: 'Connexion...',
+    gameRunning: 'En jeu',
+
+    // Connection error
+    connErrTitle: 'Connexion impossible',
+    connErrMsg: 'MiyooDeck ne répond pas sur',
+    connErrStep1: 'Assure-toi que la Miyoo est allumée',
+    connErrStep2: 'Lance Apps → Web Deck sur la console',
+    connErrStep3: 'Vérifie que le WiFi est activé',
+    connErrStep4: 'Recharge cette page',
+    connErrRetry: '🔄 Réessayer',
 
     // Nav
     navDashboard: 'Tableau de bord',
@@ -77,6 +87,16 @@ const translations = {
     appName: 'MiyooDeck',
     appTagline: 'Your Miyoo in your browser',
     connecting: 'Connecting...',
+    gameRunning: 'In game',
+
+    // Connection error
+    connErrTitle: 'Connection failed',
+    connErrMsg: 'MiyooDeck is not responding on',
+    connErrStep1: 'Make sure the Miyoo is powered on',
+    connErrStep2: 'Open Apps → Web Deck on the console',
+    connErrStep3: 'Check that WiFi is enabled',
+    connErrStep4: 'Reload this page',
+    connErrRetry: '🔄 Retry',
 
     // Nav
     navDashboard: 'Dashboard',

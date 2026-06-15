@@ -87,7 +87,7 @@ func readConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path = filepath.Clean(path)
-	if !strings.HasPrefix(path, SDCard) && !strings.HasPrefix(path, SysDir) {
+	if !withinSD(path) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
@@ -115,7 +115,7 @@ func writeConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Path = filepath.Clean(req.Path)
-	if !strings.HasPrefix(req.Path, SDCard) && !strings.HasPrefix(req.Path, SysDir) {
+	if !withinSD(req.Path) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
