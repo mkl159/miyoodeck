@@ -45,6 +45,10 @@ export const api = {
 
   // System
   system: () => json('/api/system'),
+  power: (action) => json('/api/system/power', {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+  }),
 
   // Games
   systems: () => json('/api/systems'),

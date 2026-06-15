@@ -34,6 +34,7 @@ MiyooDeck est un **third-party pour Onion OS** qui transforme ton Miyoo Mini (ou
 - 📁 **Gérer tes fichiers** — uploader des ROMs par drag & drop, télécharger tes sauvegardes
 - 🖥️ **Voir l'écran en direct** avec les couleurs correctes (capture framebuffer BGR565)
 - ⚙️ **Éditer les configs** RetroArch, Onion, etc. avec sauvegarde automatique
+- 🔌 **Redémarrer / éteindre** la console à distance
 
 ### Prérequis
 
@@ -58,6 +59,7 @@ Carte SD/
         ├── launch.sh
         ├── stop.sh
         ├── webdeck        (binaire ARM)
+        ├── webdeck.png    (icône)
         └── www/           (interface web)
 ```
 
@@ -129,6 +131,7 @@ MiyooDeck is an **Onion OS third-party app** that lets you control your Miyoo Mi
 - 📁 **Manage files** — drag & drop ROM upload, save games download
 - 🖥️ **Live screen view** with correct colors (BGR565 framebuffer capture, 1-5 FPS)
 - ⚙️ **Edit configs** (RetroArch, Onion) with automatic backup
+- 🔌 **Reboot / power off** the console remotely
 
 ### Requirements
 
@@ -153,6 +156,7 @@ SD Card/
         ├── launch.sh
         ├── stop.sh
         ├── webdeck         (ARM binary)
+        ├── webdeck.png     (icon)
         └── www/            (web interface)
 ```
 
@@ -216,6 +220,7 @@ MiyooDeck
 │   ├── config.go     Config file editor + .bak backup
 │   ├── screenshot.go /dev/fb0 → PNG (auto-detect 16/32-bit, FBIOGET_VSCREENINFO)
 │   ├── input.go      Button injection → /dev/input/event0 (Onion keycodes)
+│   ├── power.go      Reboot / poweroff endpoint (sync before halt)
 │   ├── websocket.go  Real-time stats + screenshot broadcast (panic-safe)
 │   └── mdns.go       mDNS responder → miyoodeck.local
 └── frontend/         Svelte 4 + Vite SPA

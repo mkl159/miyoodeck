@@ -50,6 +50,11 @@ const translations = {
     savePng: '⬇ Capture PNG',
     screenUnavailable: 'Aperçu non disponible',
     startGame: 'Lancez un jeu pour voir l\'écran',
+    power: 'Alimentation',
+    reboot: 'Redémarrer',
+    poweroff: 'Éteindre',
+    rebootConfirm: 'Redémarrer la console maintenant ?',
+    poweroffConfirm: 'Éteindre la console maintenant ?',
 
     // Games
     systems: 'Systèmes',
@@ -131,6 +136,11 @@ const translations = {
     savePng: '⬇ Save PNG',
     screenUnavailable: 'Preview unavailable',
     startGame: 'Start a game to see the screen',
+    power: 'Power',
+    reboot: 'Reboot',
+    poweroff: 'Power off',
+    rebootConfirm: 'Reboot the console now?',
+    poweroffConfirm: 'Power off the console now?',
 
     // Games
     systems: 'Systems',

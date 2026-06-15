@@ -28,6 +28,14 @@
   let imgError = false
   $: screenshotSrc, (imgError = false)
 
+  let powering = ''
+  async function power(action) {
+    const msg = action === 'reboot' ? $t.rebootConfirm : $t.poweroffConfirm
+    if (!confirm(msg)) return
+    powering = action
+    try { await api.power(action) } catch (e) { /* device is going down */ }
+  }
+
   async function saveScreenshot() {
     downloading = true
     const a = document.createElement('a')
@@ -90,6 +98,19 @@
       <div class="value ip">{stats?.ip ?? '—'}</div>
       {#if stats}<small>↑ {stats.uptime}</small>{/if}
       {#if gameOn}<div class="game-badge">🎮 {$t.gameRunning}</div>{/if}
+    </div>
+  </div>
+
+  <!-- Power control -->
+  <div class="power-row">
+    <span class="power-label">{$t.power}</span>
+    <div class="power-btns">
+      <button class="pwr reboot" on:click={() => power('reboot')} disabled={powering !== ''}>
+        ↻ {$t.reboot}
+      </button>
+      <button class="pwr off" on:click={() => power('poweroff')} disabled={powering !== ''}>
+        ⏻ {$t.poweroff}
+      </button>
     </div>
   </div>
 
@@ -160,6 +181,22 @@
   .fill.ram { background: linear-gradient(90deg,#6b9dff,#a0c0ff); }
   .fill.bat { background: linear-gradient(90deg,#6bff9d,#a0ffcc); }
   .fill.bat.low { background: #ff6b6b; }
+
+  .power-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; padding: 10px 14px;
+  }
+  .power-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #3a3a3a; }
+  .power-btns { display: flex; gap: 8px; }
+  .pwr {
+    background: #111; border: 1px solid #1a1a1a; border-radius: 8px;
+    color: #888; padding: 6px 14px; font-size: 0.78rem; font-weight: 600;
+    cursor: pointer; transition: all .15s;
+  }
+  .pwr:hover:not(:disabled) { transform: translateY(-1px); }
+  .pwr.reboot:hover:not(:disabled) { border-color: #6b9dff55; color: #6b9dff; }
+  .pwr.off:hover:not(:disabled) { border-color: #ff6b6b55; color: #ff6b6b; }
+  .pwr:disabled { opacity: .4; cursor: default; }
 
   .screen-card { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; overflow: hidden; flex: 1; }
   .card-header {
