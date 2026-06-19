@@ -109,6 +109,9 @@ func main() {
 	// Protected API
 	mux.HandleFunc("/api/system", auth(handleSystem))
 	mux.HandleFunc("/api/system/power", auth(handlePower))
+	mux.HandleFunc("/api/system/brightness", auth(handleBrightness))
+	mux.HandleFunc("/api/search", auth(handleSearch))
+	mux.HandleFunc("/api/random", auth(handleRandom))
 	mux.HandleFunc("/api/systems", auth(handleSystems))
 	mux.HandleFunc("/api/roms", auth(handleRoms))
 	mux.HandleFunc("/api/launch", auth(handleLaunch))

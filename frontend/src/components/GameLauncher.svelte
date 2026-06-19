@@ -11,7 +11,37 @@
   let error = ''
   let search = ''
 
+  // Global cross-system search + random launcher
+  let globalQuery = ''
+  let globalResults = []
+  let searching = false
+  let gTimer = null
+  let surprising = false
+  $: showGlobal = globalQuery.trim().length >= 2
+
   onMount(loadSystems)
+
+  function onGlobalInput() {
+    clearTimeout(gTimer)
+    if (globalQuery.trim().length < 2) { globalResults = []; return }
+    gTimer = setTimeout(doGlobalSearch, 250)
+  }
+
+  async function doGlobalSearch() {
+    searching = true; error = ''
+    try { globalResults = await api.searchRoms(globalQuery.trim()) }
+    catch (e) { error = e.message; globalResults = [] }
+    searching = false
+  }
+
+  async function surprise() {
+    surprising = true; error = ''
+    try {
+      const rom = await api.randomRom(selectedSystem?.name)
+      await launchRom(rom)
+    } catch (e) { error = e.message }
+    surprising = false
+  }
 
   async function loadSystems() {
     loading = true; error = ''
@@ -30,7 +60,7 @@
   async function launchRom(rom) {
     launching = rom.path; error = ''
     try {
-      await api.launch(rom.path, selectedSystem.name)
+      await api.launch(rom.path, rom.system || selectedSystem?.name)
       setTimeout(() => { launching = null }, 2500)
     } catch (e) {
       error = e.message; launching = null
@@ -42,6 +72,12 @@
 
 <div class="launcher">
   <div class="systems-panel">
+    <div class="global-bar">
+      <input type="search" class="global-search" placeholder={$t.searchAll}
+        bind:value={globalQuery} on:input={onGlobalInput} />
+      <button class="surprise-btn" on:click={surprise} disabled={surprising || launching !== null}
+        title={$t.surpriseMe}>{$t.surpriseMe}</button>
+    </div>
     <div class="panel-header">{$t.systems}</div>
     {#if loading && !selectedSystem}
       <p class="state-msg">...</p>
@@ -62,7 +98,29 @@
   </div>
 
   <div class="roms-panel">
-    {#if !selectedSystem}
+    {#if showGlobal}
+      <div class="roms-header">
+        <h2>🔍 {$t.searchResults}</h2>
+        <span class="result-count">{globalResults.length}</span>
+      </div>
+      {#if error}<div class="error-bar">{error}</div>{/if}
+      {#if searching}
+        <p class="state-msg">...</p>
+      {:else}
+        <div class="roms-list">
+          {#each globalResults as rom (rom.path)}
+            <button class="rom-btn" class:launching={launching === rom.path}
+              on:click={() => launchRom(rom)} disabled={launching !== null}>
+              <span class="rom-icon">{launching === rom.path ? '▶' : '◉'}</span>
+              <span class="rom-name">{rom.name}</span>
+              <span class="sys-tag">{rom.system}</span>
+            </button>
+          {:else}
+            <p class="state-msg">"{globalQuery}" — {$t.noRoms}</p>
+          {/each}
+        </div>
+      {/if}
+    {:else if !selectedSystem}
       <div class="empty-state">
         <span class="big-icon">🎮</span>
         <p>{$t.selectSystem}</p>
@@ -117,6 +175,26 @@
     padding: 10px 12px; font-size: 0.65rem;
     text-transform: uppercase; letter-spacing: 1.5px; color: #333;
     border-bottom: 1px solid #111;
+  }
+  .global-bar { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-bottom: 1px solid #111; }
+  .global-search {
+    width: 100%; background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 8px;
+    color: #ccc; padding: 6px 9px; font-size: 0.75rem; outline: none;
+  }
+  .global-search:focus { border-color: #e8488a33; }
+  .surprise-btn {
+    width: 100%; background: linear-gradient(135deg,#e8488a,#c42d6e); border: none;
+    border-radius: 8px; color: #fff; padding: 6px; font-size: 0.75rem; font-weight: 700;
+    cursor: pointer; transition: all .15s;
+  }
+  .surprise-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 3px 14px #e8488a44; }
+  .surprise-btn:disabled { opacity: .4; cursor: default; }
+  .result-count {
+    font-size: 0.65rem; color: #444; background: #111; padding: 1px 7px; border-radius: 8px;
+  }
+  .sys-tag {
+    font-size: 0.62rem; color: #6b9dff; background: #6b9dff11; border: 1px solid #6b9dff22;
+    padding: 1px 6px; border-radius: 6px; white-space: nowrap;
   }
   .sys-btn {
     display: flex; align-items: center; justify-content: space-between;

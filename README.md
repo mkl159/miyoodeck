@@ -35,6 +35,8 @@ MiyooDeck est un **third-party pour Onion OS** qui transforme ton Miyoo Mini (ou
 - 🖥️ **Voir l'écran en direct** avec les couleurs correctes (capture framebuffer BGR565)
 - ⚙️ **Éditer les configs** RetroArch, Onion, etc. avec sauvegarde automatique
 - 🔌 **Redémarrer / éteindre** la console à distance
+- 🌡️ **Température du SoC** et ☀️ **réglage de la luminosité** en direct
+- 🔍 **Recherche globale** de jeux (tous systèmes) + 🎲 **lancement aléatoire** « Surprends-moi »
 
 ### Prérequis
 
@@ -132,6 +134,8 @@ MiyooDeck is an **Onion OS third-party app** that lets you control your Miyoo Mi
 - 🖥️ **Live screen view** with correct colors (BGR565 framebuffer capture, 1-5 FPS)
 - ⚙️ **Edit configs** (RetroArch, Onion) with automatic backup
 - 🔌 **Reboot / power off** the console remotely
+- 🌡️ **SoC temperature** monitoring and ☀️ live **brightness** control
+- 🔍 **Global game search** (all systems) + 🎲 random **"Surprise me"** launcher
 
 ### Requirements
 
@@ -221,6 +225,8 @@ MiyooDeck
 │   ├── screenshot.go /dev/fb0 → PNG (auto-detect 16/32-bit, FBIOGET_VSCREENINFO)
 │   ├── input.go      Button injection → /dev/input/event0 (Onion keycodes)
 │   ├── power.go      Reboot / poweroff endpoint (sync before halt)
+│   ├── brightness.go Backlight read/set via /sys/class/backlight
+│   ├── search.go     Global ROM search + random "surprise me" launcher
 │   ├── websocket.go  Real-time stats + screenshot broadcast (panic-safe)
 │   └── mdns.go       mDNS responder → miyoodeck.local
 └── frontend/         Svelte 4 + Vite SPA

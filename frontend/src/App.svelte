@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { api, setToken, getToken, createWS } from './api.js'
   import { t, lang, setLang, availableLangs } from './i18n.js'
   import Dashboard from './components/Dashboard.svelte'
@@ -18,6 +18,13 @@
   // Fix #13: track connection error for helpful message
   let connectionError = false
   let wsControls = null
+
+  // Futile but cute: a live clock in the header.
+  let clock = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const clockTimer = setInterval(() => {
+    clock = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }, 10000)
+  onDestroy(() => clearInterval(clockTimer))
 
   $: tabs = [
     { id: 'dashboard', label: $t.navDashboard, icon: '◉' },
@@ -115,6 +122,7 @@
       </div>
       <span class="brand">MiyooDeck</span>
       <div class="right">
+        <span class="clock">{clock}</span>
         {#if stats?.game_running}
           <span class="badge game">🎮 {$t.gameRunning}</span>
         {/if}
@@ -190,6 +198,7 @@
   .logo-sm{position:relative;width:26px;height:26px;flex-shrink:0}
   .brand{font-weight:800;color:#e8488a;font-size:1rem;letter-spacing:1px;flex:1}
   .right{display:flex;align-items:center;gap:7px}
+  .clock{font-size:0.7rem;color:#555;font-variant-numeric:tabular-nums;font-family:monospace}
   .badge{font-size:0.68rem;padding:2px 7px;background:#111;border:1px solid #1e1e1e;border-radius:10px;color:#666}
   .badge.charging{border-color:#6bff9d22;color:#6bff9d}
   .badge.cpu{border-color:#e8488a1a}

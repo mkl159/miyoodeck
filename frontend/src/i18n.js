@@ -45,6 +45,8 @@ const translations = {
     battery: 'Batterie',
     network: 'Réseau',
     uptime: 'Uptime',
+    temp: 'Température',
+    brightness: 'Luminosité',
     liveScreen: 'Écran en direct',
     refresh: 'Rafraîchir',
     savePng: '⬇ Capture PNG',
@@ -59,12 +61,15 @@ const translations = {
     // Games
     systems: 'Systèmes',
     searchRoms: 'Rechercher des ROMs...',
+    searchAll: 'Rechercher dans tous les systèmes...',
     selectSystem: 'Sélectionnez un système',
-    selectSystemSub: 'pour parcourir les ROMs',
+    selectSystemSub: 'ou utilisez la recherche globale 🔍',
     noRoms: 'Aucune ROM dans ce système',
     launching: 'Lancement...',
     launchError: 'Erreur de lancement',
     noSystemsFound: 'Aucune ROM trouvée sur la carte SD',
+    surpriseMe: '🎲 Surprends-moi',
+    searchResults: 'Résultats',
 
     // Files
     upload: '⬆ Envoyer',
@@ -131,6 +136,8 @@ const translations = {
     battery: 'Battery',
     network: 'Network',
     uptime: 'Uptime',
+    temp: 'Temperature',
+    brightness: 'Brightness',
     liveScreen: 'Live Screen',
     refresh: 'Refresh',
     savePng: '⬇ Save PNG',
@@ -145,12 +152,15 @@ const translations = {
     // Games
     systems: 'Systems',
     searchRoms: 'Search ROMs...',
+    searchAll: 'Search across all systems...',
     selectSystem: 'Select a system',
-    selectSystemSub: 'to browse ROMs',
+    selectSystemSub: 'or use the global search 🔍',
     noRoms: 'No ROMs in this system',
     launching: 'Launching...',
     launchError: 'Launch error',
     noSystemsFound: 'No ROMs found on SD card',
+    surpriseMe: '🎲 Surprise me',
+    searchResults: 'Results',
 
     // Files
     upload: '⬆ Upload',

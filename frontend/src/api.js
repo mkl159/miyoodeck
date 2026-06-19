@@ -49,10 +49,17 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ action }),
   }),
+  brightness: () => json('/api/system/brightness'),
+  setBrightness: (value) => json('/api/system/brightness', {
+    method: 'POST',
+    body: JSON.stringify({ value }),
+  }),
 
   // Games
   systems: () => json('/api/systems'),
   roms: (system) => json(`/api/roms?system=${encodeURIComponent(system)}`),
+  searchRoms: (q) => json(`/api/search?q=${encodeURIComponent(q)}`),
+  randomRom: (system) => json(`/api/random${system ? `?system=${encodeURIComponent(system)}` : ''}`),
   launch: (rom_path, system) => json('/api/launch', {
     method: 'POST',
     body: JSON.stringify({ rom_path, system }),

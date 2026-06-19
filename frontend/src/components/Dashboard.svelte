@@ -12,8 +12,28 @@
   let timer = null
   let downloading = false
 
-  onMount(startPolling)
+  // Brightness control (only shown if the device exposes a backlight)
+  let bright = 0
+  let brightMax = 100
+  let brightSupported = false
+  let brightTimer = null
+
+  onMount(() => { startPolling(); loadBrightness() })
   onDestroy(stopPolling)
+
+  async function loadBrightness() {
+    try {
+      const b = await api.brightness()
+      brightSupported = !!b.supported
+      if (brightSupported) { bright = b.value; brightMax = b.max || 100 }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Debounce slider writes so we don't spam the device while dragging.
+  function onBright() {
+    clearTimeout(brightTimer)
+    brightTimer = setTimeout(() => api.setBrightness(bright).catch(() => {}), 150)
+  }
 
   function startPolling() {
     stopPolling()
@@ -56,6 +76,7 @@
   $: gameOn  = stats?.game_running ?? false
   $: ramOk   = stats && stats.ram.total > 0
   $: batOk   = batPct >= 0
+  $: tempC   = stats?.temp_c ?? 0
 </script>
 
 <div class="dashboard">
@@ -99,7 +120,27 @@
       {#if stats}<small>↑ {stats.uptime}</small>{/if}
       {#if gameOn}<div class="game-badge">🎮 {$t.gameRunning}</div>{/if}
     </div>
+
+    <!-- Temperature -->
+    {#if tempC > 0}
+    <div class="card">
+      <div class="label">{$t.temp}</div>
+      <div class="value">{tempC}<span class="unit">°C</span></div>
+      <div class="bar"><div class="fill temp" class:hot={tempC >= 70} style="width:{Math.min(tempC, 100)}%"></div></div>
+      <small class:warn={tempC >= 70}>{tempC >= 70 ? '🔥' : 'SoC'}</small>
+    </div>
+    {/if}
   </div>
+
+  <!-- Brightness -->
+  {#if brightSupported}
+  <div class="power-row">
+    <span class="power-label">☀ {$t.brightness}</span>
+    <input class="bright-slider" type="range" min="0" max={brightMax}
+      bind:value={bright} on:input={onBright} />
+    <span class="bright-val">{Math.round((bright / brightMax) * 100)}%</span>
+  </div>
+  {/if}
 
   <!-- Power control -->
   <div class="power-row">
@@ -181,6 +222,11 @@
   .fill.ram { background: linear-gradient(90deg,#6b9dff,#a0c0ff); }
   .fill.bat { background: linear-gradient(90deg,#6bff9d,#a0ffcc); }
   .fill.bat.low { background: #ff6b6b; }
+  .fill.temp { background: linear-gradient(90deg,#6bff9d,#ffcf6b); }
+  .fill.temp.hot { background: linear-gradient(90deg,#ff8a4b,#ff6b6b); }
+
+  .bright-slider { flex: 1; margin: 0 12px; accent-color: #e8488a; height: 4px; cursor: pointer; }
+  .bright-val { font-size: 0.72rem; color: #888; min-width: 34px; text-align: right; }
 
   .power-row {
     display: flex; align-items: center; justify-content: space-between;
