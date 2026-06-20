@@ -96,6 +96,64 @@ func handleInputPress(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"ok": "1"})
 }
 
+// macroStep is one entry in a button sequence.
+type macroStep struct {
+	Button string `json:"button"`
+	Action string `json:"action"`   // press/release/tap (default: tap)
+	Delay  int    `json:"delay_ms"` // pause AFTER this step
+}
+
+// handleInputMacro plays a sequence of button presses server-side — e.g. combos
+// or the Konami code. POST /api/input/macro {"steps":[{button,action,delay_ms}]}
+func handleInputMacro(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Steps []macroStep `json:"steps"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(req.Steps) == 0 || len(req.Steps) > 64 {
+		jsonError(w, "Macro must have 1–64 steps", http.StatusBadRequest)
+		return
+	}
+	for _, s := range req.Steps {
+		if _, ok := buttonMap[s.Button]; !ok {
+			jsonError(w, "Unknown button: "+s.Button, http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Play asynchronously so a long macro doesn't hold the HTTP connection.
+	go func(steps []macroStep) {
+		for _, s := range steps {
+			action := s.Action
+			if action == "" {
+				action = "tap"
+			}
+			sendInputEvent(buttonMap[s.Button], action)
+			d := s.Delay
+			if d < 0 {
+				d = 0
+			}
+			if d > 2000 {
+				d = 2000
+			}
+			if d == 0 {
+				d = 60 // sensible default gap between buttons
+			}
+			time.Sleep(time.Duration(d) * time.Millisecond)
+		}
+	}(req.Steps)
+
+	jsonOK(w, map[string]interface{}{"playing": len(req.Steps)})
+}
+
 func sendInputEvent(code uint16, action string) error {
 	f, err := os.OpenFile("/dev/input/event0", os.O_WRONLY, 0)
 	if err != nil {

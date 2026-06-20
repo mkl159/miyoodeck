@@ -18,13 +18,31 @@
   // Fix #13: track connection error for helpful message
   let connectionError = false
   let wsControls = null
+  let version = ''
 
   // Futile but cute: a live clock in the header.
   let clock = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const clockTimer = setInterval(() => {
     clock = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }, 10000)
-  onDestroy(() => clearInterval(clockTimer))
+
+  // Futile easter egg: type the Konami code to trigger party mode.
+  const KSEQ = 'ArrowUp,ArrowUp,ArrowDown,ArrowDown,ArrowLeft,ArrowRight,ArrowLeft,ArrowRight,b,a'
+  let kbuf = []
+  let partyMode = false
+  function onKey(e) {
+    kbuf = [...kbuf, e.key].slice(-10)
+    if (kbuf.join(',') === KSEQ) {
+      partyMode = true
+      setTimeout(() => partyMode = false, 5000)
+    }
+  }
+  if (typeof window !== 'undefined') window.addEventListener('keydown', onKey)
+
+  onDestroy(() => {
+    clearInterval(clockTimer)
+    if (typeof window !== 'undefined') window.removeEventListener('keydown', onKey)
+  })
 
   $: tabs = [
     { id: 'dashboard', label: $t.navDashboard, icon: '◉' },
@@ -34,6 +52,7 @@
   ]
 
   onMount(async () => {
+    api.version().then(v => version = v.version).catch(() => {})
     try {
       const status = await api.authStatus()
       pinConfigured = status.pin_configured
@@ -85,7 +104,7 @@
   }
 </script>
 
-<div class="app">
+<div class="app" class:party={partyMode}>
   {#if loading}
     <div class="splash">
       <div class="logo">
@@ -120,7 +139,10 @@
       <div class="logo-sm">
         <div class="ring r1 sm"></div><div class="ring r2 sm"></div>
       </div>
-      <span class="brand">MiyooDeck</span>
+      <div class="brand-wrap">
+        <span class="brand">MiyooDeck</span>
+        {#if version}<span class="ver">v{version}</span>{/if}
+      </div>
       <div class="right">
         <span class="clock">{clock}</span>
         {#if stats?.game_running}
@@ -170,6 +192,9 @@
   :global(::-webkit-scrollbar-thumb){background:#e8488a33;border-radius:3px}
 
   .app{display:flex;flex-direction:column;min-height:100vh}
+  .app.party .brand{animation:rainbow 1s linear infinite}
+  .app.party .logo-sm .ring{animation:rainbow 1s linear infinite,pulse 2s ease-in-out infinite}
+  @keyframes rainbow{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}
 
   /* Splash / error */
   .splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:18px}
@@ -196,7 +221,9 @@
   /* Header */
   .header{display:flex;align-items:center;gap:10px;padding:9px 16px;background:#0d0d0d;border-bottom:1px solid #e8488a1a}
   .logo-sm{position:relative;width:26px;height:26px;flex-shrink:0}
-  .brand{font-weight:800;color:#e8488a;font-size:1rem;letter-spacing:1px;flex:1}
+  .brand-wrap{flex:1;display:flex;align-items:baseline;gap:6px}
+  .brand{font-weight:800;color:#e8488a;font-size:1rem;letter-spacing:1px}
+  .ver{font-size:0.6rem;color:#444;font-weight:600}
   .right{display:flex;align-items:center;gap:7px}
   .clock{font-size:0.7rem;color:#555;font-variant-numeric:tabular-nums;font-family:monospace}
   .badge{font-size:0.68rem;padding:2px 7px;background:#111;border:1px solid #1e1e1e;border-radius:10px;color:#666}

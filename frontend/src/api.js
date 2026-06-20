@@ -44,7 +44,10 @@ export const api = {
   setupPin: (pin) => json('/api/auth/setup', { method: 'POST', body: JSON.stringify({ pin }) }),
 
   // System
+  version: () => json('/api/version'),
   system: () => json('/api/system'),
+  quitGame: () => json('/api/system/quit-game', { method: 'POST' }),
+  logs: (lines = 200) => json(`/api/logs?lines=${lines}`),
   power: (action) => json('/api/system/power', {
     method: 'POST',
     body: JSON.stringify({ action }),
@@ -60,6 +63,13 @@ export const api = {
   roms: (system) => json(`/api/roms?system=${encodeURIComponent(system)}`),
   searchRoms: (q) => json(`/api/search?q=${encodeURIComponent(q)}`),
   randomRom: (system) => json(`/api/random${system ? `?system=${encodeURIComponent(system)}` : ''}`),
+
+  // Favorites
+  favorites: () => json('/api/favorites'),
+  favoriteToggle: (rom) => json('/api/favorites', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'toggle', path: rom.path, name: rom.name, system: rom.system }),
+  }),
   launch: (rom_path, system) => json('/api/launch', {
     method: 'POST',
     body: JSON.stringify({ rom_path, system }),
@@ -120,6 +130,17 @@ export const api = {
     method: 'POST',
     body: JSON.stringify({ button, action }),
   }),
+  // Play a server-side button sequence (combos / Konami code)
+  macro: (steps) => json('/api/input/macro', {
+    method: 'POST',
+    body: JSON.stringify({ steps }),
+  }),
+
+  // Native MJPEG live stream (smooth video-like view in an <img>)
+  streamUrl: () => {
+    const t = token ? `?token=${encodeURIComponent(token)}` : ''
+    return `${BASE}/api/stream.mjpeg${t}`
+  },
 
   // Config
   configList: () => json('/api/config/list'),

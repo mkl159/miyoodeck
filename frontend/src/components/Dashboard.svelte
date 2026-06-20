@@ -42,11 +42,43 @@
   }
   function stopPolling() { clearInterval(timer) }
 
-  // Fix #8: use a single clean URL with fresh ts each time
-  $: screenshotSrc = screenshot || api.screenshotUrl(ts)
+  // Live screen: either polled snapshots or a smooth native MJPEG stream.
+  let streamMode = false
+  $: screenshotSrc = streamMode ? api.streamUrl() : (screenshot || api.screenshotUrl(ts))
   // Reset the load-error flag whenever the source changes so each refresh retries
   let imgError = false
   $: screenshotSrc, (imgError = false)
+
+  // Rolling CPU history for the sparkline (futile but pretty).
+  let cpuHistory = []
+  $: if (stats) cpuHistory = [...cpuHistory, stats.cpu_percent].slice(-32)
+  $: spark = cpuHistory.length > 1
+    ? cpuHistory.map((v, i) => `${(i / (cpuHistory.length - 1)) * 100},${100 - Math.min(Math.max(v, 0), 100)}`).join(' ')
+    : ''
+
+  // Quit the running game
+  let quitting = false
+  async function quitGame() {
+    if (!confirm($t.quitGameConfirm)) return
+    quitting = true
+    try { await api.quitGame() } catch (e) { /* ignore */ }
+    setTimeout(() => quitting = false, 2000)
+  }
+
+  // Server log viewer
+  let showLogPanel = false
+  let logText = ''
+  let logLoading = false
+  async function loadLogs() {
+    logLoading = true
+    try { const r = await api.logs(300); logText = r.log || '(vide)' }
+    catch (e) { logText = e.message }
+    logLoading = false
+  }
+  function toggleLogs() {
+    showLogPanel = !showLogPanel
+    if (showLogPanel) loadLogs()
+  }
 
   let powering = ''
   async function power(action) {
@@ -86,6 +118,11 @@
       <div class="label">{$t.cpu}</div>
       <div class="value">{cpuPct}<span class="unit">%</span></div>
       <div class="bar"><div class="fill cpu" style="width:{cpuPct}%"></div></div>
+      {#if spark}
+        <svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline points={spark} />
+        </svg>
+      {/if}
       {#if stats}<small>{stats.cpu_freq_mhz} MHz</small>{/if}
     </div>
 
@@ -146,6 +183,10 @@
   <div class="power-row">
     <span class="power-label">{$t.power}</span>
     <div class="power-btns">
+      {#if gameOn}
+        <button class="pwr quit" on:click={quitGame} disabled={quitting}>{$t.quitGame}</button>
+      {/if}
+      <button class="pwr" on:click={toggleLogs} class:active={showLogPanel}>{$t.showLogs}</button>
       <button class="pwr reboot" on:click={() => power('reboot')} disabled={powering !== ''}>
         ↻ {$t.reboot}
       </button>
@@ -154,6 +195,17 @@
       </button>
     </div>
   </div>
+
+  <!-- Server log viewer -->
+  {#if showLogPanel}
+  <div class="log-panel">
+    <div class="log-head">
+      <span class="power-label">{$t.logs}</span>
+      <button class="pwr" on:click={loadLogs} disabled={logLoading}>{$t.refreshLogs}</button>
+    </div>
+    <pre class="log-body">{logLoading ? '…' : logText}</pre>
+  </div>
+  {/if}
 
   <!-- Gamepad controller -->
   <Controller />
@@ -174,6 +226,9 @@
             <option value={10}>10s</option>
           </select>
         </label>
+        <button class="btn-sm" class:active={streamMode} on:click={() => streamMode = !streamMode}>
+          🎥 {$t.smoothStream}
+        </button>
         <button class="btn-sm" on:click={saveScreenshot} disabled={downloading}>
           {$t.savePng}
         </button>
@@ -242,7 +297,18 @@
   .pwr:hover:not(:disabled) { transform: translateY(-1px); }
   .pwr.reboot:hover:not(:disabled) { border-color: #6b9dff55; color: #6b9dff; }
   .pwr.off:hover:not(:disabled) { border-color: #ff6b6b55; color: #ff6b6b; }
+  .pwr.quit { border-color: #ff6b6b33; color: #ff8a8a; }
+  .pwr.quit:hover:not(:disabled) { border-color: #ff6b6b; color: #ff6b6b; }
+  .pwr.active { border-color: #e8488a; color: #e8488a; background: #e8488a11; }
   .pwr:disabled { opacity: .4; cursor: default; }
+
+  .log-panel { background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 14px; overflow: hidden; }
+  .log-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #111; }
+  .log-body {
+    margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto;
+    font-family: 'Consolas','Monaco',monospace; font-size: 0.68rem; line-height: 1.5;
+    color: #8a8a8a; white-space: pre-wrap; word-break: break-word;
+  }
 
   .screen-card { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; overflow: hidden; flex: 1; }
   .card-header {
@@ -267,7 +333,11 @@
     transition: all .15s;
   }
   .btn-sm:hover:not(:disabled) { border-color: #e8488a44; color: #e8488a; }
+  .btn-sm.active { border-color: #e8488a; color: #e8488a; background: #e8488a11; }
   .btn-sm:disabled { opacity: .3; }
+
+  .spark { width: 100%; height: 18px; margin-top: 4px; display: block; }
+  .spark polyline { fill: none; stroke: #e8488a; stroke-width: 2.5; vector-effect: non-scaling-stroke; opacity: .8; }
 
   .screen-wrap {
     position: relative; display: flex; justify-content: center; align-items: center;

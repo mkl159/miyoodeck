@@ -70,6 +70,15 @@ const translations = {
     noSystemsFound: 'Aucune ROM trouvée sur la carte SD',
     surpriseMe: '🎲 Surprends-moi',
     searchResults: 'Résultats',
+    favorites: 'Favoris',
+    noFavorites: 'Aucun favori — clique sur ★ pour en ajouter',
+    smoothStream: 'Flux fluide',
+    konami: 'Code Konami envoyé ! 🎉',
+    quitGame: '⏹ Quitter le jeu',
+    quitGameConfirm: 'Quitter le jeu en cours ? (la sauvegarde sera effectuée)',
+    logs: 'Logs serveur',
+    showLogs: '📜 Logs',
+    refreshLogs: '↻ Rafraîchir',
 
     // Files
     upload: '⬆ Envoyer',
@@ -161,6 +170,15 @@ const translations = {
     noSystemsFound: 'No ROMs found on SD card',
     surpriseMe: '🎲 Surprise me',
     searchResults: 'Results',
+    favorites: 'Favorites',
+    noFavorites: 'No favorites yet — tap ★ to add some',
+    smoothStream: 'Smooth stream',
+    konami: 'Konami code sent! 🎉',
+    quitGame: '⏹ Quit game',
+    quitGameConfirm: 'Quit the running game? (it will save first)',
+    logs: 'Server logs',
+    showLogs: '📜 Logs',
+    refreshLogs: '↻ Refresh',
 
     // Files
     upload: '⬆ Upload',

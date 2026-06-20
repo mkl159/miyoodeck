@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const Version = "1.7"
+
 const (
 	Port      = 8080
 	StaticDir = "./www"
@@ -92,13 +94,16 @@ var sessions = newTokenStore()
 func main() {
 	ip := getLocalIP()
 	fmt.Printf("\n╔══════════════════════════════════════╗\n")
-	fmt.Printf("║        MIYOODECK  v1.6               ║\n")
+	fmt.Printf("║        MIYOODECK  v%-19s║\n", Version)
 	fmt.Printf("╠══════════════════════════════════════╣\n")
 	fmt.Printf("║  http://%-28s  ║\n", fmt.Sprintf("%s:%d", ip, Port))
 	fmt.Printf("║  http://%-28s  ║\n", fmt.Sprintf("miyoodeck.local:%d", Port))
 	fmt.Printf("╚══════════════════════════════════════╝\n\n")
 
 	mux := http.NewServeMux()
+
+	// Public
+	mux.HandleFunc("/api/version", handleVersion)
 
 	// Auth (public)
 	mux.HandleFunc("/api/auth/login", handleLogin)
@@ -110,6 +115,8 @@ func main() {
 	mux.HandleFunc("/api/system", auth(handleSystem))
 	mux.HandleFunc("/api/system/power", auth(handlePower))
 	mux.HandleFunc("/api/system/brightness", auth(handleBrightness))
+	mux.HandleFunc("/api/system/quit-game", auth(handleQuitGame))
+	mux.HandleFunc("/api/logs", auth(handleLogs))
 	mux.HandleFunc("/api/search", auth(handleSearch))
 	mux.HandleFunc("/api/random", auth(handleRandom))
 	mux.HandleFunc("/api/systems", auth(handleSystems))
@@ -122,9 +129,12 @@ func main() {
 	mux.HandleFunc("/api/download", auth(handleDownload))
 	mux.HandleFunc("/api/saves/backup", auth(handleSavesBackup))
 	mux.HandleFunc("/api/screenshot", auth(handleScreenshot))
+	mux.HandleFunc("/api/stream.mjpeg", auth(handleStream))
 	mux.HandleFunc("/api/config/list", auth(handleConfigList))
 	mux.HandleFunc("/api/config", auth(handleConfig))
 	mux.HandleFunc("/api/input/press", auth(handleInputPress))
+	mux.HandleFunc("/api/input/macro", auth(handleInputMacro))
+	mux.HandleFunc("/api/favorites", auth(handleFavorites))
 	mux.HandleFunc("/ws", auth(handleWS))
 
 	// SPA fallback
@@ -251,6 +261,10 @@ func handleSetupPin(w http.ResponseWriter, r *http.Request) {
 
 func handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]bool{"pin_configured": pinConfigured()})
+}
+
+func handleVersion(w http.ResponseWriter, r *http.Request) {
+	jsonOK(w, map[string]string{"version": Version, "name": "MiyooDeck"})
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

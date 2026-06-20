@@ -37,6 +37,9 @@ MiyooDeck est un **third-party pour Onion OS** qui transforme ton Miyoo Mini (ou
 - 🔌 **Redémarrer / éteindre** la console à distance
 - 🌡️ **Température du SoC** et ☀️ **réglage de la luminosité** en direct
 - 🔍 **Recherche globale** de jeux (tous systèmes) + 🎲 **lancement aléatoire** « Surprends-moi »
+- ⭐ **Favoris** de jeux persistés + ⏹️ **quitter le jeu** en cours proprement
+- 🎥 **Streaming MJPEG** fluide (vue vidéo native dans le navigateur)
+- 🎛️ **Macros de boutons** côté serveur (avec easter-egg Konami) + 📈 mini-graphe CPU + 📜 visualiseur de logs
 
 ### Prérequis
 
@@ -136,6 +139,9 @@ MiyooDeck is an **Onion OS third-party app** that lets you control your Miyoo Mi
 - 🔌 **Reboot / power off** the console remotely
 - 🌡️ **SoC temperature** monitoring and ☀️ live **brightness** control
 - 🔍 **Global game search** (all systems) + 🎲 random **"Surprise me"** launcher
+- ⭐ Persisted game **favorites** + ⏹️ cleanly **quit** the running game
+- 🎥 Smooth **MJPEG streaming** (native video-like view in the browser)
+- 🎛️ Server-side **button macros** (with a Konami easter egg) + 📈 CPU sparkline + 📜 log viewer
 
 ### Requirements
 
@@ -227,6 +233,9 @@ MiyooDeck
 │   ├── power.go      Reboot / poweroff endpoint (sync before halt)
 │   ├── brightness.go Backlight read/set via /sys/class/backlight
 │   ├── search.go     Global ROM search + random "surprise me" launcher
+│   ├── favorites.go  Persisted favorite ROMs (JSON on SD card)
+│   ├── stream.go     Native MJPEG live stream (multipart/x-mixed-replace)
+│   ├── logs.go       Tail of the server log (/api/logs)
 │   ├── websocket.go  Real-time stats + screenshot broadcast (panic-safe)
 │   └── mdns.go       mDNS responder → miyoodeck.local
 └── frontend/         Svelte 4 + Vite SPA
