@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: server/go.sum
+
+      - name: Build ARM binary
+        working-directory: server
+        run: |
+          GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 \
+            go build -ldflags="-s -w" -o ../package/App/WebDeck/webdeck .
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME:-dev}"
+          cd package
+          zip -r "../MiyooDeck-${VERSION}.zip" App
+          cd ..
+          ls -lh MiyooDeck-*.zip
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MiyooDeck-*.zip
+          generate_release_notes: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiyooDeck-package
+          path: MiyooDeck-*.zip

@@ -12,8 +12,28 @@
   let timer = null
   let downloading = false
 
-  onMount(startPolling)
+  // Brightness control (only shown if the device exposes a backlight)
+  let bright = 0
+  let brightMax = 100
+  let brightSupported = false
+  let brightTimer = null
+
+  onMount(() => { startPolling(); loadBrightness() })
   onDestroy(stopPolling)
+
+  async function loadBrightness() {
+    try {
+      const b = await api.brightness()
+      brightSupported = !!b.supported
+      if (brightSupported) { bright = b.value; brightMax = b.max || 100 }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Debounce slider writes so we don't spam the device while dragging.
+  function onBright() {
+    clearTimeout(brightTimer)
+    brightTimer = setTimeout(() => api.setBrightness(bright).catch(() => {}), 150)
+  }
 
   function startPolling() {
     stopPolling()
@@ -22,8 +42,51 @@
   }
   function stopPolling() { clearInterval(timer) }
 
-  // Fix #8: use a single clean URL with fresh ts each time
-  $: screenshotSrc = screenshot || api.screenshotUrl(ts)
+  // Live screen: either polled snapshots or a smooth native MJPEG stream.
+  let streamMode = false
+  $: screenshotSrc = streamMode ? api.streamUrl() : (screenshot || api.screenshotUrl(ts))
+  // Reset the load-error flag whenever the source changes so each refresh retries
+  let imgError = false
+  $: screenshotSrc, (imgError = false)
+
+  // Rolling CPU history for the sparkline (futile but pretty).
+  let cpuHistory = []
+  $: if (stats) cpuHistory = [...cpuHistory, stats.cpu_percent].slice(-32)
+  $: spark = cpuHistory.length > 1
+    ? cpuHistory.map((v, i) => `${(i / (cpuHistory.length - 1)) * 100},${100 - Math.min(Math.max(v, 0), 100)}`).join(' ')
+    : ''
+
+  // Quit the running game
+  let quitting = false
+  async function quitGame() {
+    if (!confirm($t.quitGameConfirm)) return
+    quitting = true
+    try { await api.quitGame() } catch (e) { /* ignore */ }
+    setTimeout(() => quitting = false, 2000)
+  }
+
+  // Server log viewer
+  let showLogPanel = false
+  let logText = ''
+  let logLoading = false
+  async function loadLogs() {
+    logLoading = true
+    try { const r = await api.logs(300); logText = r.log || '(vide)' }
+    catch (e) { logText = e.message }
+    logLoading = false
+  }
+  function toggleLogs() {
+    showLogPanel = !showLogPanel
+    if (showLogPanel) loadLogs()
+  }
+
+  let powering = ''
+  async function power(action) {
+    const msg = action === 'reboot' ? $t.rebootConfirm : $t.poweroffConfirm
+    if (!confirm(msg)) return
+    powering = action
+    try { await api.power(action) } catch (e) { /* device is going down */ }
+  }
 
   async function saveScreenshot() {
     downloading = true
@@ -45,6 +108,7 @@
   $: gameOn  = stats?.game_running ?? false
   $: ramOk   = stats && stats.ram.total > 0
   $: batOk   = batPct >= 0
+  $: tempC   = stats?.temp_c ?? 0
 </script>
 
 <div class="dashboard">
@@ -54,6 +118,11 @@
       <div class="label">{$t.cpu}</div>
       <div class="value">{cpuPct}<span class="unit">%</span></div>
       <div class="bar"><div class="fill cpu" style="width:{cpuPct}%"></div></div>
+      {#if spark}
+        <svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline points={spark} />
+        </svg>
+      {/if}
       {#if stats}<small>{stats.cpu_freq_mhz} MHz</small>{/if}
     </div>
 
@@ -86,9 +155,57 @@
       <div class="label">{$t.network}</div>
       <div class="value ip">{stats?.ip ?? '—'}</div>
       {#if stats}<small>↑ {stats.uptime}</small>{/if}
-      {#if gameOn}<div class="game-badge">🎮 En jeu</div>{/if}
+      {#if gameOn}<div class="game-badge">🎮 {$t.gameRunning}</div>{/if}
+    </div>
+
+    <!-- Temperature -->
+    {#if tempC > 0}
+    <div class="card">
+      <div class="label">{$t.temp}</div>
+      <div class="value">{tempC}<span class="unit">°C</span></div>
+      <div class="bar"><div class="fill temp" class:hot={tempC >= 70} style="width:{Math.min(tempC, 100)}%"></div></div>
+      <small class:warn={tempC >= 70}>{tempC >= 70 ? '🔥' : 'SoC'}</small>
+    </div>
+    {/if}
+  </div>
+
+  <!-- Brightness -->
+  {#if brightSupported}
+  <div class="power-row">
+    <span class="power-label">☀ {$t.brightness}</span>
+    <input class="bright-slider" type="range" min="0" max={brightMax}
+      bind:value={bright} on:input={onBright} />
+    <span class="bright-val">{Math.round((bright / brightMax) * 100)}%</span>
+  </div>
+  {/if}
+
+  <!-- Power control -->
+  <div class="power-row">
+    <span class="power-label">{$t.power}</span>
+    <div class="power-btns">
+      {#if gameOn}
+        <button class="pwr quit" on:click={quitGame} disabled={quitting}>{$t.quitGame}</button>
+      {/if}
+      <button class="pwr" on:click={toggleLogs} class:active={showLogPanel}>{$t.showLogs}</button>
+      <button class="pwr reboot" on:click={() => power('reboot')} disabled={powering !== ''}>
+        ↻ {$t.reboot}
+      </button>
+      <button class="pwr off" on:click={() => power('poweroff')} disabled={powering !== ''}>
+        ⏻ {$t.poweroff}
+      </button>
     </div>
   </div>
+
+  <!-- Server log viewer -->
+  {#if showLogPanel}
+  <div class="log-panel">
+    <div class="log-head">
+      <span class="power-label">{$t.logs}</span>
+      <button class="pwr" on:click={loadLogs} disabled={logLoading}>{$t.refreshLogs}</button>
+    </div>
+    <pre class="log-body">{logLoading ? '…' : logText}</pre>
+  </div>
+  {/if}
 
   <!-- Gamepad controller -->
   <Controller />
@@ -109,6 +226,9 @@
             <option value={10}>10s</option>
           </select>
         </label>
+        <button class="btn-sm" class:active={streamMode} on:click={() => streamMode = !streamMode}>
+          🎥 {$t.smoothStream}
+        </button>
         <button class="btn-sm" on:click={saveScreenshot} disabled={downloading}>
           {$t.savePng}
         </button>
@@ -116,17 +236,16 @@
     </div>
 
     <div class="screen-wrap">
-      <!-- Fix #3: removed dead <script context="module"> -->
-      {#if screenshotSrc}
+      {#if screenshotSrc && !imgError}
         <img src={screenshotSrc} alt="Miyoo screen" class="screen"
-          on:error={(e) => { e.target.style.opacity = 0 }}
-          on:load={(e) => { e.target.style.opacity = 1 }}
+          on:error={() => imgError = true}
         />
+      {:else}
+        <div class="no-screen">
+          <span>{$t.screenUnavailable}</span>
+          <small>{$t.startGame}</small>
+        </div>
       {/if}
-      <div class="no-screen">
-        <span>{$t.screenUnavailable}</span>
-        <small>{$t.startGame}</small>
-      </div>
     </div>
   </div>
 </div>
@@ -158,6 +277,38 @@
   .fill.ram { background: linear-gradient(90deg,#6b9dff,#a0c0ff); }
   .fill.bat { background: linear-gradient(90deg,#6bff9d,#a0ffcc); }
   .fill.bat.low { background: #ff6b6b; }
+  .fill.temp { background: linear-gradient(90deg,#6bff9d,#ffcf6b); }
+  .fill.temp.hot { background: linear-gradient(90deg,#ff8a4b,#ff6b6b); }
+
+  .bright-slider { flex: 1; margin: 0 12px; accent-color: #e8488a; height: 4px; cursor: pointer; }
+  .bright-val { font-size: 0.72rem; color: #888; min-width: 34px; text-align: right; }
+
+  .power-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; padding: 10px 14px;
+  }
+  .power-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #3a3a3a; }
+  .power-btns { display: flex; gap: 8px; }
+  .pwr {
+    background: #111; border: 1px solid #1a1a1a; border-radius: 8px;
+    color: #888; padding: 6px 14px; font-size: 0.78rem; font-weight: 600;
+    cursor: pointer; transition: all .15s;
+  }
+  .pwr:hover:not(:disabled) { transform: translateY(-1px); }
+  .pwr.reboot:hover:not(:disabled) { border-color: #6b9dff55; color: #6b9dff; }
+  .pwr.off:hover:not(:disabled) { border-color: #ff6b6b55; color: #ff6b6b; }
+  .pwr.quit { border-color: #ff6b6b33; color: #ff8a8a; }
+  .pwr.quit:hover:not(:disabled) { border-color: #ff6b6b; color: #ff6b6b; }
+  .pwr.active { border-color: #e8488a; color: #e8488a; background: #e8488a11; }
+  .pwr:disabled { opacity: .4; cursor: default; }
+
+  .log-panel { background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 14px; overflow: hidden; }
+  .log-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #111; }
+  .log-body {
+    margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto;
+    font-family: 'Consolas','Monaco',monospace; font-size: 0.68rem; line-height: 1.5;
+    color: #8a8a8a; white-space: pre-wrap; word-break: break-word;
+  }
 
   .screen-card { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 14px; overflow: hidden; flex: 1; }
   .card-header {
@@ -182,7 +333,11 @@
     transition: all .15s;
   }
   .btn-sm:hover:not(:disabled) { border-color: #e8488a44; color: #e8488a; }
+  .btn-sm.active { border-color: #e8488a; color: #e8488a; background: #e8488a11; }
   .btn-sm:disabled { opacity: .3; }
+
+  .spark { width: 100%; height: 18px; margin-top: 4px; display: block; }
+  .spark polyline { fill: none; stroke: #e8488a; stroke-width: 2.5; vector-effect: non-scaling-stroke; opacity: .8; }
 
   .screen-wrap {
     position: relative; display: flex; justify-content: center; align-items: center;
@@ -191,11 +346,9 @@
   .screen {
     max-width: 100%; max-height: 320px; border-radius: 4px;
     image-rendering: pixelated; border: 1px solid #1a1a1a;
-    transition: opacity .3s;
   }
-  .screen[style*="opacity: 0"] ~ .no-screen { display: flex; }
   .no-screen {
-    position: absolute; display: none; flex-direction: column;
+    display: flex; flex-direction: column;
     align-items: center; gap: 6px; color: #2a2a2a; text-align: center; font-size: 0.8rem;
   }
   small { color: #1f1f1f; font-size: 0.68rem; }

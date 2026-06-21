@@ -210,6 +210,7 @@ func broadcastLoop() {
 				IP:      getLocalIP(),
 				Uptime:  readUptime(),
 				CPUFreq: readCPUFreq(),
+				Temp:    readCPUTemp(),
 			}
 			msg := WSMessage{Type: "stats", Data: map[string]interface{}{
 				"cpu_percent":  info.CPU,
@@ -218,6 +219,7 @@ func broadcastLoop() {
 				"ip":           info.IP,
 				"uptime":       info.Uptime,
 				"cpu_freq_mhz": info.CPUFreq,
+				"temp_c":       info.Temp,
 				"game_running": isGameRunning(),
 			}}
 			if data, err := json.Marshal(msg); err == nil {

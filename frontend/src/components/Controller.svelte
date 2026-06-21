@@ -25,6 +25,16 @@
     api.pressButton(btn, 'tap').catch(() => {})
   }
 
+  // Server-side macro: the Konami code, played as a tap sequence.
+  let konamiPlaying = false
+  function konami() {
+    const seq = ['up', 'up', 'down', 'down', 'left', 'right', 'left', 'right', 'b', 'a']
+    konamiPlaying = true
+    api.macro(seq.map(b => ({ button: b, action: 'tap', delay_ms: 120 })))
+      .catch(() => {})
+      .finally(() => setTimeout(() => konamiPlaying = false, seq.length * 130))
+  }
+
   function mkBtn(btn) {
     return {
       onpointerdown: (e) => pointerDown(btn, e),
@@ -125,9 +135,10 @@
     </div>
   </div>
 
-  <!-- Volume -->
+  <!-- Volume + macro -->
   <div class="vol-row">
     <button class="btn vol-btn" on:pointerdown|preventDefault={(e) => tap('volume_dn', e)}>🔉</button>
+    <button class="btn macro-btn" class:active={konamiPlaying} on:click={konami}>🎮 Konami</button>
     <button class="btn vol-btn" on:pointerdown|preventDefault={(e) => tap('volume_up', e)}>🔊</button>
   </div>
 </div>
@@ -280,6 +291,13 @@
     width: 44px;
     height: 28px;
     font-size: 0.9rem;
+    border-radius: 8px;
+  }
+  .macro-btn {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 0.62rem;
+    letter-spacing: 0.5px;
     border-radius: 8px;
   }
 </style>

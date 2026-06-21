@@ -3,12 +3,12 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"math"
 	"time"
 )
 
@@ -43,6 +43,7 @@ type SystemInfo struct {
 	IP      string  `json:"ip"`
 	Uptime  string  `json:"uptime"`
 	CPUFreq int     `json:"cpu_freq_mhz"`
+	Temp    int     `json:"temp_c"`
 }
 
 type RAMInfo struct {
@@ -65,8 +66,34 @@ func handleSystem(w http.ResponseWriter, r *http.Request) {
 		IP:      getLocalIP(),
 		Uptime:  readUptime(),
 		CPUFreq: readCPUFreq(),
+		Temp:    readCPUTemp(),
 	}
 	jsonOK(w, info)
+}
+
+// readCPUTemp returns the SoC temperature in °C, or 0 if unavailable.
+// Kernels expose the value in milli-degrees (e.g. 48000 = 48°C).
+func readCPUTemp() int {
+	for _, p := range []string{
+		"/sys/class/thermal/thermal_zone0/temp",
+		"/sys/devices/virtual/thermal/thermal_zone0/temp",
+	} {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		v, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err != nil {
+			continue
+		}
+		if v > 1000 { // milli-degrees
+			v /= 1000
+		}
+		if v > 0 && v < 150 {
+			return v
+		}
+	}
+	return 0
 }
 
 func readCPUUsage() float64 {

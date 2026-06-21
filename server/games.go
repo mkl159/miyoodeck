@@ -177,7 +177,7 @@ func handleLaunch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.RomPath = filepath.Clean(req.RomPath)
-	if !strings.HasPrefix(req.RomPath, SDCard) {
+	if !withinSD(req.RomPath) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
@@ -197,10 +197,7 @@ func handleLaunch(w http.ResponseWriter, r *http.Request) {
 	// Fix #5: if a game (retroarch) is already running, send a safe quit signal
 	// instead of hard-killing — avoids save corruption
 	if isGameRunning() {
-		// Ask RetroArch to quit cleanly via its network command interface
-		exec.Command("sh", "-c",
-			`echo -e "QUIT\n" | nc -u -w1 127.0.0.1 55355 2>/dev/null || `+
-				`killall -15 retroarch 2>/dev/null`).Run()
+		quitRunningGame()
 		// Give it 2 seconds to save and exit
 		time.Sleep(2 * time.Second)
 	}
@@ -258,6 +255,28 @@ func buildLaunchCommand(romPath, system string) (string, error) {
 	return "", fmt.Errorf("no emulator found for system %q", system)
 }
 
+// quitRunningGame asks RetroArch to quit cleanly (network command), falling
+// back to a graceful SIGTERM. This lets the emulator flush its save first.
+func quitRunningGame() {
+	exec.Command("sh", "-c",
+		`echo -e "QUIT\n" | nc -u -w1 127.0.0.1 55355 2>/dev/null || `+
+			`killall -15 retroarch 2>/dev/null`).Run()
+}
+
+// handleQuitGame stops the running game and returns to the Onion menu.
+func handleQuitGame(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !isGameRunning() {
+		jsonOK(w, map[string]string{"message": "No game running"})
+		return
+	}
+	quitRunningGame()
+	jsonOK(w, map[string]string{"message": "Quitting game…"})
+}
+
 // isGameRunning returns true if retroarch or a game emulator is currently active.
 func isGameRunning() bool {
 	out, err := exec.Command("pgrep", "-x", "retroarch").Output()
@@ -267,21 +286,21 @@ func isGameRunning() bool {
 func findCore(system string) string {
 	// Map common system names to core names
 	coreMap := map[string]string{
-		"GBA":    "gpsp_libretro",
-		"GBC":    "gambatte_libretro",
-		"GB":     "gambatte_libretro",
-		"SFC":    "snes9x2005_plus_libretro",
-		"SNES":   "snes9x2005_plus_libretro",
-		"FC":     "fceumm_libretro",
-		"NES":    "fceumm_libretro",
-		"MD":     "picodrive_libretro",
-		"SMS":    "picodrive_libretro",
-		"PS":     "pcsx_rearmed_libretro",
-		"PSX":    "pcsx_rearmed_libretro",
-		"PCE":    "mednafen_pce_fast_libretro",
-		"NGP":    "mednafen_ngp_libretro",
-		"GG":     "genesis_plus_gx_libretro",
-		"WSWAN":  "mednafen_wswan_libretro",
+		"GBA":   "gpsp_libretro",
+		"GBC":   "gambatte_libretro",
+		"GB":    "gambatte_libretro",
+		"SFC":   "snes9x2005_plus_libretro",
+		"SNES":  "snes9x2005_plus_libretro",
+		"FC":    "fceumm_libretro",
+		"NES":   "fceumm_libretro",
+		"MD":    "picodrive_libretro",
+		"SMS":   "picodrive_libretro",
+		"PS":    "pcsx_rearmed_libretro",
+		"PSX":   "pcsx_rearmed_libretro",
+		"PCE":   "mednafen_pce_fast_libretro",
+		"NGP":   "mednafen_ngp_libretro",
+		"GG":    "genesis_plus_gx_libretro",
+		"WSWAN": "mednafen_wswan_libretro",
 	}
 
 	coreName, ok := coreMap[strings.ToUpper(system)]
