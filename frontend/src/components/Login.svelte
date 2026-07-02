@@ -20,9 +20,18 @@
       const res = await api.login(pin)
       dispatch('login', res.token)
     } catch (e) {
-      error = $t.wrongPin
+      // Show the server's message for lockouts ("Too many attempts…"),
+      // fall back to the generic wrong-PIN text otherwise.
+      error = e.message && e.message !== 'Unauthorized' ? e.message : $t.wrongPin
     }
     loading = false
+  }
+
+  // PINs are numeric — silently drop anything else as the user types.
+  function digitsOnly(e) {
+    const clean = e.target.value.replace(/\D/g, '')
+    if (clean !== e.target.value) e.target.value = clean
+    return clean
   }
 
   async function setupPin() {
@@ -60,16 +69,18 @@
     {#if setupMode}
       <p class="subtitle">{$t.setupSubtitle}</p>
       <input
-        type="password" inputmode="numeric"
+        type="password" inputmode="numeric" autocomplete="new-password"
         placeholder={$t.setupNewPin}
         bind:value={newPin}
+        on:input={(e) => newPin = digitsOnly(e)}
         on:keydown={handleKeydown}
         maxlength="8"
       />
       <input
-        type="password" inputmode="numeric"
+        type="password" inputmode="numeric" autocomplete="new-password"
         placeholder={$t.setupConfirm}
         bind:value={confirmPin}
+        on:input={(e) => confirmPin = digitsOnly(e)}
         on:keydown={handleKeydown}
         maxlength="8"
       />
@@ -82,9 +93,10 @@
     {:else}
       <p class="subtitle">{$t.loginSubtitle}</p>
       <input
-        type="password" inputmode="numeric"
+        type="password" inputmode="numeric" autocomplete="current-password"
         placeholder={$t.loginPin}
         bind:value={pin}
+        on:input={(e) => pin = digitsOnly(e)}
         on:keydown={handleKeydown}
         maxlength="8"
         autofocus

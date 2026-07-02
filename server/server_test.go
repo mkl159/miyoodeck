@@ -117,3 +117,77 @@ func TestSum(t *testing.T) {
 		t.Errorf("sum(nil) = %d, want 0", got)
 	}
 }
+
+func TestValidPin(t *testing.T) {
+	cases := []struct {
+		pin  string
+		want bool
+	}{
+		{"1234", true},
+		{"12345678", true},
+		{"0000", true},
+		{"123", false},       // too short
+		{"123456789", false}, // too long
+		{"12a4", false},      // non-digit
+		{"12 4", false},
+		{"", false},
+		{"١٢٣٤", false}, // non-ASCII digits
+	}
+	for _, c := range cases {
+		if got := validPin(c.pin); got != c.want {
+			t.Errorf("validPin(%q) = %v, want %v", c.pin, got, c.want)
+		}
+	}
+}
+
+func TestIsProtectedPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/mnt/SDCARD", true},
+		{"/mnt/SDCARD/", true}, // trailing slash is cleaned
+		{"/mnt/SDCARD/Roms", true},
+		{"/mnt/SDCARD/App/WebDeck", true},
+		{"/mnt/SDCARD/Roms/GBA", false}, // inside a protected dir is fine
+		{"/mnt/SDCARD/Roms/GBA/game.gba", false},
+		{"/mnt/SDCARD/random.txt", false},
+	}
+	for _, c := range cases {
+		if got := isProtectedPath(c.path); got != c.want {
+			t.Errorf("isProtectedPath(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
+
+func TestSanitizeName(t *testing.T) {
+	ok := []string{"NewFolder", "My Game (USA)", "rom_v1.2.gba"}
+	for _, n := range ok {
+		if _, err := sanitizeName(n); err != nil {
+			t.Errorf("sanitizeName(%q) unexpectedly rejected: %v", n, err)
+		}
+	}
+	bad := []string{"", ".", "..", "a/b", `a\b`, "../etc", ".hidden", "  ", "x\x00y"}
+	for _, n := range bad {
+		if _, err := sanitizeName(n); err == nil {
+			t.Errorf("sanitizeName(%q) unexpectedly accepted", n)
+		}
+	}
+}
+
+func TestLoginLimiter(t *testing.T) {
+	var l loginLimiter
+	if l.blocked() != 0 {
+		t.Fatal("fresh limiter should not block")
+	}
+	for i := 0; i < maxLoginFails; i++ {
+		l.fail()
+	}
+	if l.blocked() == 0 {
+		t.Fatal("limiter should block after max consecutive failures")
+	}
+	l.success()
+	if l.blocked() != 0 {
+		t.Fatal("successful login should clear the lockout")
+	}
+}

@@ -40,6 +40,8 @@ MiyooDeck est un **third-party pour Onion OS** qui transforme ton Miyoo Mini (ou
 - ⭐ **Favoris** de jeux persistés + ⏹️ **quitter le jeu** en cours proprement
 - 🎥 **Streaming MJPEG** fluide (vue vidéo native dans le navigateur)
 - 🎛️ **Macros de boutons** côté serveur (avec easter-egg Konami) + 📈 mini-graphe CPU + 📜 visualiseur de logs
+- ⌨️ **Jouer au clavier** (flèches, X=A, Z=B… désactivable) + 📁 nouveau dossier / ✎ renommer dans les fichiers
+- 🛡️ **Sécurité renforcée** : anti-brute-force du PIN (verrouillage 30 s), changement de PIN authentifié, dossiers système protégés contre la suppression
 
 ### Prérequis
 
@@ -142,6 +144,8 @@ MiyooDeck is an **Onion OS third-party app** that lets you control your Miyoo Mi
 - ⭐ Persisted game **favorites** + ⏹️ cleanly **quit** the running game
 - 🎥 Smooth **MJPEG streaming** (native video-like view in the browser)
 - 🎛️ Server-side **button macros** (with a Konami easter egg) + 📈 CPU sparkline + 📜 log viewer
+- ⌨️ **Play with your keyboard** (arrows, X=A, Z=B… toggleable) + 📁 new folder / ✎ rename in the file manager
+- 🛡️ **Hardened security**: PIN brute-force lockout (30 s), authenticated PIN change, system folders protected from deletion
 
 ### Requirements
 
@@ -280,9 +284,11 @@ No WebSocket clients connected = stats/screenshot broadcast stops automatically 
 
 ## Sécurité / Security
 
-- PIN optionnel (hash SHA-256 stocké dans un fichier)
+- PIN optionnel 4–8 chiffres (hash SHA-256 stocké dans un fichier)
+- Anti-brute-force : verrouillage 30 s après 5 tentatives échouées
+- Changement de PIN réservé aux sessions authentifiées
 - Réseau local uniquement — pas d'accès internet
-- Accès fichiers limité à `/mnt/SDCARD`
+- Accès fichiers limité à `/mnt/SDCARD` ; dossiers système protégés contre la suppression
 - Tokens de session en mémoire (expiration 24h)
 
 ---
