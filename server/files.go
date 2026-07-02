@@ -107,6 +107,43 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, f)
 }
 
+// protectedPaths are directories whose deletion would brick Onion OS or
+// MiyooDeck itself. Deleting inside them stays allowed; deleting the
+// directory itself is refused.
+var protectedPaths = map[string]bool{
+	SDCard:                    true,
+	SysDir:                    true,
+	RomsDir:                   true,
+	EmuDir:                    true,
+	"/mnt/SDCARD/Saves":       true,
+	"/mnt/SDCARD/RetroArch":   true,
+	"/mnt/SDCARD/miyoo":       true,
+	"/mnt/SDCARD/App":         true,
+	"/mnt/SDCARD/App/WebDeck": true,
+	"/mnt/SDCARD/BIOS":        true,
+	"/mnt/SDCARD/Icons":       true,
+}
+
+func isProtectedPath(path string) bool {
+	return protectedPaths[filepath.Clean(path)]
+}
+
+// sanitizeName validates a user-supplied file/directory name: it must be a
+// single visible path component (no separators, no traversal).
+func sanitizeName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > 255 {
+		return "", fmt.Errorf("invalid name")
+	}
+	if strings.ContainsAny(name, "/\\\x00") || name == "." || name == ".." {
+		return "", fmt.Errorf("invalid name")
+	}
+	if strings.HasPrefix(name, ".") {
+		return "", fmt.Errorf("hidden names are not allowed")
+	}
+	return name, nil
+}
+
 func handleDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
 		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -122,11 +159,96 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
+	if isProtectedPath(path) {
+		jsonError(w, "This system folder cannot be deleted", http.StatusForbidden)
+		return
+	}
 	if err := os.RemoveAll(path); err != nil {
 		jsonError(w, "Delete failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	jsonOK(w, map[string]string{"message": "Deleted: " + path})
+}
+
+// handleMkdir creates a new directory. POST /api/mkdir {"path","name"}
+func handleMkdir(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Path string `json:"path"`
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	name, err := sanitizeName(req.Name)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	parent := filepath.Clean(req.Path)
+	if !withinSD(parent) {
+		jsonError(w, "Access denied", http.StatusForbidden)
+		return
+	}
+	dest := filepath.Join(parent, name)
+	if _, err := os.Stat(dest); err == nil {
+		jsonError(w, "Already exists: "+name, http.StatusConflict)
+		return
+	}
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		jsonError(w, "Cannot create directory: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]string{"message": "Created: " + name, "path": dest})
+}
+
+// handleRename renames a file or directory in place.
+// POST /api/rename {"path","new_name"}
+func handleRename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Path    string `json:"path"`
+		NewName string `json:"new_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+	name, err := sanitizeName(req.NewName)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	src := filepath.Clean(req.Path)
+	if !withinSD(src) || isProtectedPath(src) {
+		jsonError(w, "Access denied", http.StatusForbidden)
+		return
+	}
+	if _, err := os.Stat(src); err != nil {
+		jsonError(w, "Not found", http.StatusNotFound)
+		return
+	}
+	dest := filepath.Join(filepath.Dir(src), name)
+	if dest == src {
+		jsonOK(w, map[string]string{"message": "Unchanged", "path": src})
+		return
+	}
+	if _, err := os.Stat(dest); err == nil {
+		jsonError(w, "Already exists: "+name, http.StatusConflict)
+		return
+	}
+	if err := os.Rename(src, dest); err != nil {
+		jsonError(w, "Rename failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]string{"message": "Renamed to: " + name, "path": dest})
 }
 
 func handleUpload(w http.ResponseWriter, r *http.Request) {

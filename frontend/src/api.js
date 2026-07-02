@@ -78,6 +78,14 @@ export const api = {
   // Files
   files: (path) => json(`/api/files?path=${encodeURIComponent(path)}`),
   delete: (path) => json(`/api/delete?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
+  mkdir: (path, name) => json('/api/mkdir', {
+    method: 'POST',
+    body: JSON.stringify({ path, name }),
+  }),
+  rename: (path, new_name) => json('/api/rename', {
+    method: 'POST',
+    body: JSON.stringify({ path, new_name }),
+  }),
 
   // Fix #6: upload with progress callback
   upload: (files, destPath, onProgress) => new Promise((resolve, reject) => {

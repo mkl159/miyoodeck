@@ -38,6 +38,7 @@ const translations = {
     pinMismatch: 'Les PINs ne correspondent pas',
     pinTooShort: 'Le PIN doit contenir au moins 4 chiffres',
     wrongPin: 'Code PIN incorrect',
+    logoutTip: 'Déconnexion',
 
     // Dashboard
     cpu: 'Processeur',
@@ -76,6 +77,8 @@ const translations = {
     konami: 'Code Konami envoyé ! 🎉',
     quitGame: '⏹ Quitter le jeu',
     quitGameConfirm: 'Quitter le jeu en cours ? (la sauvegarde sera effectuée)',
+    kbdControl: '⌨ Clavier',
+    kbdHint: 'Flèches = croix · X=A · Z=B · S=X · A=Y · Q/E=L1/R1 · W/R=L2/R2 · Entrée=START · Maj=SELECT · M=MENU',
     logs: 'Logs serveur',
     showLogs: '📜 Logs',
     refreshLogs: '↻ Rafraîchir',
@@ -89,6 +92,12 @@ const translations = {
     uploadComplete: 'Envoi terminé',
     extract: 'Extraire',
     emptyDir: 'Dossier vide',
+    newFolder: '📁+ Dossier',
+    newFolderPrompt: 'Nom du nouveau dossier :',
+    renameTip: 'Renommer',
+    renamePrompt: 'Nouveau nom :',
+    downloadTip: 'Télécharger',
+    deleteTip: 'Supprimer',
 
     // Config
     configFiles: 'Fichiers de config',
@@ -138,6 +147,7 @@ const translations = {
     pinMismatch: 'PINs do not match',
     pinTooShort: 'PIN must be at least 4 digits',
     wrongPin: 'Wrong PIN',
+    logoutTip: 'Log out',
 
     // Dashboard
     cpu: 'CPU',
@@ -176,6 +186,8 @@ const translations = {
     konami: 'Konami code sent! 🎉',
     quitGame: '⏹ Quit game',
     quitGameConfirm: 'Quit the running game? (it will save first)',
+    kbdControl: '⌨ Keyboard',
+    kbdHint: 'Arrows = D-pad · X=A · Z=B · S=X · A=Y · Q/E=L1/R1 · W/R=L2/R2 · Enter=START · Shift=SELECT · M=MENU',
     logs: 'Server logs',
     showLogs: '📜 Logs',
     refreshLogs: '↻ Refresh',
@@ -189,6 +201,12 @@ const translations = {
     uploadComplete: 'Upload complete',
     extract: 'Extract',
     emptyDir: 'Empty directory',
+    newFolder: '📁+ Folder',
+    newFolderPrompt: 'New folder name:',
+    renameTip: 'Rename',
+    renamePrompt: 'New name:',
+    downloadTip: 'Download',
+    deleteTip: 'Delete',
 
     // Config
     configFiles: 'Config Files',

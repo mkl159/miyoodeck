@@ -1,5 +1,7 @@
 <script>
+  import { onMount, onDestroy } from 'svelte'
   import { api } from '../api.js'
+  import { t } from '../i18n.js'
 
   // Track which buttons are currently held (for visual feedback)
   let held = {}
@@ -18,6 +20,55 @@
     held = held
     api.pressButton(btn, 'release').catch(() => {})
   }
+
+  // ── Keyboard control ──────────────────────────────────────────────
+  // Play with a real keyboard instead of clicking on-screen buttons.
+  let kbdEnabled = true
+  const keyMap = {
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+    x: 'a', z: 'b', s: 'x', a: 'y',
+    q: 'l1', e: 'r1', w: 'l2', r: 'r2',
+    Enter: 'start', Shift: 'select', m: 'menu',
+  }
+
+  function keyToBtn(e) {
+    return keyMap[e.key] ?? keyMap[e.key.toLowerCase()]
+  }
+
+  // Never steal keys while the user is typing somewhere.
+  function isTyping(e) {
+    const tag = e.target?.tagName
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable
+  }
+
+  function onKeyDown(e) {
+    if (!kbdEnabled || e.repeat || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return
+    const btn = keyToBtn(e)
+    if (!btn || held[btn]) return
+    e.preventDefault()
+    held[btn] = true
+    held = held
+    api.pressButton(btn, 'press').catch(() => {})
+  }
+
+  function onKeyUp(e) {
+    if (isTyping(e)) return
+    const btn = keyToBtn(e)
+    if (!btn || !held[btn]) return
+    e.preventDefault()
+    delete held[btn]
+    held = held
+    api.pressButton(btn, 'release').catch(() => {})
+  }
+
+  onMount(() => {
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+  })
+  onDestroy(() => {
+    window.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('keyup', onKeyUp)
+  })
 
   // For buttons that shouldn't be held (menu, volume)
   function tap(btn, e) {
@@ -135,12 +186,18 @@
     </div>
   </div>
 
-  <!-- Volume + macro -->
+  <!-- Volume + macro + keyboard toggle -->
   <div class="vol-row">
-    <button class="btn vol-btn" on:pointerdown|preventDefault={(e) => tap('volume_dn', e)}>🔉</button>
+    <button class="btn vol-btn" title="Volume −" on:pointerdown|preventDefault={(e) => tap('volume_dn', e)}>🔉</button>
     <button class="btn macro-btn" class:active={konamiPlaying} on:click={konami}>🎮 Konami</button>
-    <button class="btn vol-btn" on:pointerdown|preventDefault={(e) => tap('volume_up', e)}>🔊</button>
+    <button class="btn macro-btn" class:active={kbdEnabled} title={$t.kbdHint}
+      on:click={() => kbdEnabled = !kbdEnabled}>{$t.kbdControl}</button>
+    <button class="btn vol-btn" title="Volume +" on:pointerdown|preventDefault={(e) => tap('volume_up', e)}>🔊</button>
   </div>
+
+  {#if kbdEnabled}
+    <p class="kbd-hint">{$t.kbdHint}</p>
+  {/if}
 </div>
 
 <style>
@@ -299,5 +356,11 @@
     font-size: 0.62rem;
     letter-spacing: 0.5px;
     border-radius: 8px;
+  }
+  .kbd-hint {
+    font-size: 0.6rem;
+    color: #333;
+    text-align: center;
+    line-height: 1.5;
   }
 </style>

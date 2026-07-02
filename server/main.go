@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const Version = "1.7"
+const Version = "1.8"
 
 const (
 	Port      = 8080
@@ -91,6 +91,65 @@ func (ts *tokenStore) cleanupLoop() {
 
 var sessions = newTokenStore()
 
+// ─── Login rate limiting (anti brute-force) ───────────────────────────────────
+//
+// After maxLoginFails consecutive wrong PINs, logins are locked out for
+// loginLockout. A 4-digit PIN has only 10 000 combinations — without this,
+// anyone on the LAN could brute-force it in minutes.
+
+const (
+	maxLoginFails = 5
+	loginLockout  = 30 * time.Second
+)
+
+type loginLimiter struct {
+	mu        sync.Mutex
+	fails     int
+	lockUntil time.Time
+}
+
+var limiter loginLimiter
+
+// blocked returns how long the caller must still wait, or 0 if allowed.
+func (l *loginLimiter) blocked() time.Duration {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if remaining := time.Until(l.lockUntil); remaining > 0 {
+		return remaining
+	}
+	return 0
+}
+
+func (l *loginLimiter) fail() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.fails++
+	if l.fails >= maxLoginFails {
+		l.lockUntil = time.Now().Add(loginLockout)
+		l.fails = 0
+	}
+}
+
+func (l *loginLimiter) success() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.fails = 0
+	l.lockUntil = time.Time{}
+}
+
+// validPin enforces the documented PIN format: 4 to 8 digits.
+func validPin(pin string) bool {
+	if len(pin) < 4 || len(pin) > 8 {
+		return false
+	}
+	for _, c := range pin {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func main() {
 	ip := getLocalIP()
 	fmt.Printf("\n╔══════════════════════════════════════╗\n")
@@ -126,6 +185,8 @@ func main() {
 	mux.HandleFunc("/api/upload", auth(handleUpload))
 	mux.HandleFunc("/api/unzip", auth(handleUnzip))
 	mux.HandleFunc("/api/delete", auth(handleDelete))
+	mux.HandleFunc("/api/mkdir", auth(handleMkdir))
+	mux.HandleFunc("/api/rename", auth(handleRename))
 	mux.HandleFunc("/api/download", auth(handleDownload))
 	mux.HandleFunc("/api/saves/backup", auth(handleSavesBackup))
 	mux.HandleFunc("/api/screenshot", auth(handleScreenshot))
@@ -153,31 +214,37 @@ func main() {
 	go startMDNS(ip)
 
 	log.Printf("MiyooDeck listening on :%d", Port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", Port), corsMiddleware(mux)); err != nil {
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":%d", Port),
+		Handler: corsMiddleware(mux),
+		// Guard against slow/stuck clients holding sockets open forever.
+		// No global Read/WriteTimeout: the MJPEG stream and WebSocket are
+		// intentionally long-lived.
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 // ─── Auth middleware ───────────────────────────────────────────────────────────
 
+// isAuthed reports whether the request carries a valid session token
+// (cookie, Authorization header, or ?token= query param).
+func isAuthed(r *http.Request) bool {
+	if c, err := r.Cookie("webdeck_token"); err == nil && sessions.valid(c.Value) {
+		return true
+	}
+	if h := r.Header.Get("Authorization"); sessions.valid(strings.TrimPrefix(h, "Bearer ")) {
+		return true
+	}
+	// Fix #2: query param is used by direct browser download links
+	return sessions.valid(r.URL.Query().Get("token"))
+}
+
 func auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !pinConfigured() {
-			next(w, r)
-			return
-		}
-		// Check cookie
-		if c, err := r.Cookie("webdeck_token"); err == nil && sessions.valid(c.Value) {
-			next(w, r)
-			return
-		}
-		// Check Authorization header
-		if h := r.Header.Get("Authorization"); sessions.valid(strings.TrimPrefix(h, "Bearer ")) {
-			next(w, r)
-			return
-		}
-		// Fix #2: also check ?token= query param (used by saves backup download link)
-		if t := r.URL.Query().Get("token"); sessions.valid(t) {
+		if !pinConfigured() || isAuthed(r) {
 			next(w, r)
 			return
 		}
@@ -218,11 +285,18 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		jsonOK(w, map[string]string{"token": token})
 		return
 	}
+	if wait := limiter.blocked(); wait > 0 {
+		jsonError(w, fmt.Sprintf("Too many attempts — retry in %ds", int(wait.Seconds())+1),
+			http.StatusTooManyRequests)
+		return
+	}
 	stored, _ := os.ReadFile(PinFile)
 	if strings.TrimSpace(string(stored)) != hashPin(req.Pin) {
+		limiter.fail()
 		jsonError(w, "Wrong PIN", http.StatusUnauthorized)
 		return
 	}
+	limiter.success()
 	token := newToken()
 	setTokenCookie(w, token)
 	jsonOK(w, map[string]string{"token": token})
@@ -248,8 +322,14 @@ func handleSetupPin(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	if len(req.Pin) < 4 {
-		jsonError(w, "PIN must be at least 4 digits", http.StatusBadRequest)
+	// Security: once a PIN exists, only an authenticated session may change it.
+	// Without this check anyone on the LAN could silently replace the PIN.
+	if pinConfigured() && !isAuthed(r) {
+		jsonError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if !validPin(req.Pin) {
+		jsonError(w, "PIN must be 4 to 8 digits", http.StatusBadRequest)
 		return
 	}
 	if err := os.WriteFile(PinFile, []byte(hashPin(req.Pin)), 0600); err != nil {
@@ -317,11 +397,10 @@ func getLocalIP() string {
 	addrs, _ := net.InterfaceAddrs()
 	for _, addr := range addrs {
 		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
-			if ip4 := ipNet.IP.To4(); ip4 != nil {
-				ip := ip4.String()
-				if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
-					return ip
-				}
+			// IsPrivate covers exactly RFC 1918 (10/8, 172.16/12, 192.168/16),
+			// unlike a naive "172." prefix which matches public addresses too.
+			if ip4 := ipNet.IP.To4(); ip4 != nil && ip4.IsPrivate() {
+				return ip4.String()
 			}
 		}
 	}

@@ -38,6 +38,20 @@
     catch (e) { error = e.message }
   }
 
+  async function newFolder() {
+    const name = prompt($t.newFolderPrompt)
+    if (!name?.trim()) return
+    try { const r = await api.mkdir(currentPath, name.trim()); toast(r.message); loadDir(currentPath) }
+    catch (e) { error = e.message }
+  }
+
+  async function rename(file) {
+    const name = prompt($t.renamePrompt, file.name)
+    if (!name?.trim() || name.trim() === file.name) return
+    try { const r = await api.rename(file.path, name.trim()); toast(r.message); loadDir(currentPath) }
+    catch (e) { error = e.message }
+  }
+
   async function unzip(file) {
     try { const r = await api.unzip(file.path, currentPath); toast(r.message); loadDir(currentPath) }
     catch (e) { error = e.message }
@@ -99,7 +113,8 @@
       {/each}
     </div>
     <div class="actions">
-      <button class="act" on:click={goUp} disabled={currentPath === SDCARD}>↑</button>
+      <button class="act" on:click={goUp} disabled={currentPath === SDCARD} title="↑" aria-label="Parent">↑</button>
+      <button class="act" on:click={newFolder}>{$t.newFolder}</button>
       <label class="act">{$t.upload}<input type="file" multiple on:change={onFilePick} hidden /></label>
       <button class="act green" on:click={savesBackup}>{$t.savesBackup}</button>
     </div>
@@ -151,14 +166,19 @@
               <span class="date">{f.mod_time}</span>
             </button>
             <div class="row-btns">
+              <button class="rb" title={$t.renameTip} aria-label={$t.renameTip}
+                on:click|stopPropagation={() => rename(f)}>✎</button>
               {#if !f.is_dir}
                 <!-- Fix #10: download button -->
-                <button class="rb" title="Télécharger" on:click|stopPropagation={() => download(f)}>⬇</button>
+                <button class="rb" title={$t.downloadTip} aria-label={$t.downloadTip}
+                  on:click|stopPropagation={() => download(f)}>⬇</button>
               {/if}
               {#if !f.is_dir && f.name.endsWith('.zip')}
-                <button class="rb" title={$t.extract} on:click|stopPropagation={() => unzip(f)}>📦</button>
+                <button class="rb" title={$t.extract} aria-label={$t.extract}
+                  on:click|stopPropagation={() => unzip(f)}>📦</button>
               {/if}
-              <button class="rb del" on:click|stopPropagation={() => del(f)}>✕</button>
+              <button class="rb del" title={$t.deleteTip} aria-label={$t.deleteTip}
+                on:click|stopPropagation={() => del(f)}>✕</button>
             </div>
           </div>
         {:else}

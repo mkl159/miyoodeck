@@ -160,7 +160,7 @@
               title={l.label}>{l.code.toUpperCase()}</button>
           {/each}
         </div>
-        <button class="logout-btn" on:click={logout} title="Déconnexion">⏏</button>
+        <button class="logout-btn" on:click={logout} title={$t.logoutTip} aria-label={$t.logoutTip}>⏏</button>
         <span class="dot" class:on={wsConnected}></span>
       </div>
     </header>
